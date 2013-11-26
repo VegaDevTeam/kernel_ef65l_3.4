@@ -3451,6 +3451,15 @@ static struct i2c_board_info cyttsp_ffa_info[] __initdata = {
 #endif
 #endif
 
+#if defined(CONFIG_TOUCHSCREEN_QT602240)
+static struct i2c_board_info __initdata qt602240_i2c_boardinfo[] ={
+	{
+		I2C_BOARD_INFO("qt602240-i2c", 0x4A),
+	},
+};
+#endif
+
+#ifdef CONFIG_TOUCHSCREEN_CY8C_TS
 static struct regulator *vreg_tmg200;
 
 #define TS_PEN_IRQ_GPIO 61
@@ -3628,6 +3637,7 @@ static struct i2c_board_info cy8ctma340_dragon_board_info[] = {
 		.platform_data = &cy8ctma340_dragon_pdata,
 	}
 };
+#endif
 
 #ifdef CONFIG_SERIAL_MSM_HS
 static int configure_uart_gpios(int on)
@@ -4099,7 +4109,12 @@ static struct rpm_regulator_init_data rpm_regulator_init_data[] = {
 	/*	ID        a_on pd ss min_uV   max_uV   init_ip */
 	RPM_LDO(PM8058_L0,  0, 1, 0, 1200000, 1200000, LDO150HMIN),
 	RPM_LDO(PM8058_L1,  0, 1, 0, 1200000, 1200000, LDO300HMIN),
+#if defined(CONFIG_TOUCHSCREEN_QT602240) // N1037 20120329 for ICS touch 
+	RPM_LDO(PM8058_L2,  0, 1, 0, 3300000, 3300000, LDO300HMIN),
+//E 20110908 ssoh Change_AVdd_3.3V	
+#else
 	RPM_LDO(PM8058_L2,  0, 1, 0, 1800000, 2600000, LDO300HMIN),
+#endif	
 	RPM_LDO(PM8058_L3,  0, 1, 0, 1800000, 1800000, LDO150HMIN),
 	RPM_LDO(PM8058_L4,  0, 1, 0, 2850000, 2850000,  LDO50HMIN),
 	RPM_LDO(PM8058_L5,  0, 1, 0, 2850000, 2850000, LDO300HMIN),
@@ -7345,6 +7360,7 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		ARRAY_SIZE(msm_i2c_gsbi3_tdisc_info),
 	},
 #endif
+#ifdef CONFIG_TOUCHSCREEN_CY8C_TS
 	{
 		I2C_SURF | I2C_FFA | I2C_FLUID,
 		MSM_GSBI3_QUP_I2C_BUS_ID,
@@ -7357,6 +7373,7 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		cy8ctma340_dragon_board_info,
 		ARRAY_SIZE(cy8ctma340_dragon_board_info),
 	},
+#endif	
 #if defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C_QC) || \
 		defined(CONFIG_TOUCHSCREEN_CYTTSP_I2C_QC_MODULE)
 	{
@@ -7370,6 +7387,14 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		MSM_GSBI3_QUP_I2C_BUS_ID,
 		cyttsp_ffa_info,
 		ARRAY_SIZE(cyttsp_ffa_info),
+	},
+#endif
+#if defined(CONFIG_TOUCHSCREEN_QT602240) 
+	{
+		I2C_SURF | I2C_FFA,
+		MSM_GSBI8_QUP_I2C_BUS_ID,
+		qt602240_i2c_boardinfo,
+		ARRAY_SIZE(qt602240_i2c_boardinfo),
 	},
 #endif
 #ifdef CONFIG_MSM_CAMERA
