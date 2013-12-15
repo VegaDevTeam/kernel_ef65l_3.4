@@ -3118,11 +3118,21 @@ static struct platform_device hdmi_msm_device = {
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
 
 #ifdef CONFIG_FB_MSM_MIPI_DSI
+#ifdef CONFIG_FB_MSM_MIPI_DSI_SONY
+static struct platform_device mipi_dsi_sony_panel_device = {
+	.name = "mipi_sony",
+	.id = 0,
+};
+#endif
+
+#ifdef CONFIG_FB_MSM_MIPI_DSI_TOSHIBA
 static struct platform_device mipi_dsi_toshiba_panel_device = {
 	.name = "mipi_toshiba",
 	.id = 0,
 };
+#endif
 
+#ifdef CONFIG_FB_MSM_MIPI_DSI_NOVATEK
 #define FPGA_3D_GPIO_CONFIG_ADDR	0x1D00017A
 
 static struct mipi_dsi_panel_platform_data novatek_pdata = {
@@ -3438,6 +3448,7 @@ static struct i2c_board_info cyttsp_ffa_info[] __initdata = {
 #endif /* CY_USE_TIMER */
 	},
 };
+#endif
 #endif
 
 static struct regulator *vreg_tmg200;
@@ -4254,6 +4265,9 @@ static struct platform_device *rumi_sim_devices[] __initdata = {
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 	&hdmi_msm_device,
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
+#ifdef CONFIG_FB_MSM_MIPI_DSI_SONY
+	&mipi_dsi_sony_panel_device,
+#endif
 #ifdef CONFIG_MSM_CAMERA
 #ifndef CONFIG_MSM_CAMERA_V4L2
 #ifdef CONFIG_MT9E013
@@ -5299,8 +5313,13 @@ static struct platform_device *surf_devices[] __initdata = {
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 	&hdmi_msm_device,
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
-#ifdef CONFIG_FB_MSM_MIPI_DSI
+#ifdef CONFIG_FB_MSM_MIPI_DSI_SONY
+	&mipi_dsi_sony_panel_device,
+#endif
+#ifdef CONFIG_FB_MSM_MIPI_DSI_TOSHIBA
 	&mipi_dsi_toshiba_panel_device,
+#endif
+#ifdef CONFIG_FB_MSM_MIPI_DSI_NOVATEK
 	&mipi_dsi_novatek_panel_device,
 #endif
 #ifdef CONFIG_MSM_CAMERA
@@ -8775,7 +8794,7 @@ static void setup_display_power(void)
 } while (0)
 
 #define GPIO_RESX_N (GPIO_EXPANDER_GPIO_BASE + 2)
-
+#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
 static void display_common_power(int on)
 {
 	int rc;
@@ -8986,12 +9005,12 @@ out:
 }
 #undef _GET_REGULATOR
 #endif
-
+#endif
 static int mipi_dsi_panel_power(int on);
 
 #define LCDC_NUM_GPIO 28
 #define LCDC_GPIO_START 0
-
+#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
 static void lcdc_samsung_panel_power(int on)
 {
 	int n, ret = 0;
@@ -9016,6 +9035,7 @@ static void lcdc_samsung_panel_power(int on)
 
 	mipi_dsi_panel_power(0); /* set 8058_ldo0 to LPM */
 }
+#endif
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 #define _GET_REGULATOR(var, name) do {				\
@@ -9215,7 +9235,7 @@ static int hdmi_panel_power(int on)
 #undef _GET_REGULATOR
 
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL */
-
+#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
 static int lcdc_panel_power(int on)
 {
 	int flag_on = !!on;
@@ -9230,6 +9250,7 @@ static int lcdc_panel_power(int on)
 
 	return 0;
 }
+#endif  //CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
 
 #ifdef CONFIG_MSM_BUS_SCALING
 
@@ -9440,6 +9461,7 @@ static struct msm_bus_vectors mdp_1080p_vectors[] = {
 };
 
 #else
+#ifndef CONFIG_FB_MSM_MIPI_DSI
 static struct msm_bus_vectors mdp_sd_smi_vectors[] = {
 	/* Default case static display/UI/2d/3d if FB SMI */
 	{
@@ -9505,7 +9527,7 @@ static struct msm_bus_vectors mdp_720p_vectors[] = {
 		.ib = 288000000 * 2,
 	},
 };
-
+#endif
 static struct msm_bus_vectors mdp_1080p_vectors[] = {
 	/* 1080p and less video */
 	{
@@ -9529,6 +9551,7 @@ static struct msm_bus_paths mdp_bus_scale_usecases[] = {
 		ARRAY_SIZE(mdp_init_vectors),
 		mdp_init_vectors,
 	},
+#ifndef CONFIG_FB_MSM_MIPI_DSI
 	{
 		ARRAY_SIZE(mdp_sd_smi_vectors),
 		mdp_sd_smi_vectors,
@@ -9545,6 +9568,24 @@ static struct msm_bus_paths mdp_bus_scale_usecases[] = {
 		ARRAY_SIZE(mdp_720p_vectors),
 		mdp_720p_vectors,
 	},
+#else
+	{
+		ARRAY_SIZE(mdp_1080p_vectors),
+		mdp_1080p_vectors,
+	},
+	{
+		ARRAY_SIZE(mdp_1080p_vectors),
+		mdp_1080p_vectors,
+	},
+	{
+		ARRAY_SIZE(mdp_1080p_vectors),
+		mdp_1080p_vectors,
+	},
+	{
+		ARRAY_SIZE(mdp_1080p_vectors),
+		mdp_1080p_vectors,
+	},
+#endif
 	{
 		ARRAY_SIZE(mdp_1080p_vectors),
 		mdp_1080p_vectors,
@@ -9659,14 +9700,54 @@ static struct lcdc_platform_data dtv_hdmi_prim_pdata = {
 };
 #endif
 
-
+#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
 static struct lcdc_platform_data lcdc_pdata = {
 	.lcdc_power_save   = lcdc_panel_power,
 };
-
+#endif //CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
 
 #define MDP_VSYNC_GPIO			28
+#ifdef CONFIG_FB_MSM_MIPI_DSI
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SONY)
+static unsigned LCD_VCC_POWER[] = {
+	GPIO_CFG(49, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),		/* RFR */
+};
 
+static int init_power_gpio(void)
+{
+	int rc = 0;
+	int pin = 0;
+
+	for (pin = 0; pin < ARRAY_SIZE(LCD_VCC_POWER); pin++) {
+		rc = gpio_tlmm_config(LCD_VCC_POWER[pin], GPIO_CFG_ENABLE);
+		if (rc) {
+			printk(KERN_ERR "%s: gpio_tlmm_config(%#x)=%d\n",
+					__func__, LCD_VCC_POWER[pin], rc);
+			return -EIO;
+		}
+	}
+	return rc;
+}
+
+static int mipi_dsi_panel_power(int on)
+{
+	//printk(KERN_ERR "%s: %d\n",__func__, on);
+
+	if (on) {
+		gpio_set_value(49, on);
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SONY)
+		usleep(10);
+#endif
+	} else {
+		gpio_set_value(49, on);
+	}
+	return 0;
+}
+
+static struct mipi_dsi_platform_data mipi_dsi_pdata = {
+	.dsi_power_save   = mipi_dsi_panel_power,
+};
+#else
 /*
  * MIPI_DSI only use 8058_LDO0 which need always on
  * therefore it need to be put at low power mode if
@@ -9725,6 +9806,8 @@ static struct mipi_dsi_platform_data mipi_dsi_pdata = {
 	.vsync_gpio = MDP_VSYNC_GPIO,
 	.dsi_power_save   = mipi_dsi_panel_power,
 };
+#endif
+#endif // CONFIG_FB_MSM_MIPI_DSI
 
 #ifdef CONFIG_FB_MSM_TVOUT
 static struct regulator *reg_8058_l13;
@@ -9873,8 +9956,19 @@ static void __init msm_fb_add_devices(void)
 	else
 		msm_fb_register_device("mdp", &mdp_pdata);
 
+#ifdef CONFIG_FB_MSM_LCDC_SAMSUNG_OLED_PT
 	msm_fb_register_device("lcdc", &lcdc_pdata);
+#endif
+#ifdef CONFIG_FB_MSM_MIPI_DSI
+#if defined (CONFIG_FB_MSM_MIPI_DSI_SONY)
 	msm_fb_register_device("mipi_dsi", &mipi_dsi_pdata);
+#else
+	msm_fb_register_device("mipi_dsi", NULL);
+#endif
+#if defined (CONFIG_FB_MSM_MIPI_DSI_SONY)
+	init_power_gpio();
+#endif
+#endif
 #ifdef CONFIG_MSM_BUS_SCALING
 	if (hdmi_is_primary)
 		msm_fb_register_device("dtv", &dtv_hdmi_prim_pdata);
@@ -9893,6 +9987,7 @@ static void __init msm_fb_add_devices(void)
  */
 static void set_mdp_clocks_for_wuxga(void)
 {
+#ifndef CONFIG_FB_MSM_MIPI_DSI
 	mdp_sd_smi_vectors[0].ab = 2000000000;
 	mdp_sd_smi_vectors[0].ib = 2000000000;
 	mdp_sd_smi_vectors[1].ab = 2000000000;
@@ -9912,7 +10007,7 @@ static void set_mdp_clocks_for_wuxga(void)
 	mdp_720p_vectors[0].ib = 2000000000;
 	mdp_720p_vectors[1].ab = 2000000000;
 	mdp_720p_vectors[1].ib = 2000000000;
-
+#endif
 	mdp_1080p_vectors[0].ab = 2000000000;
 	mdp_1080p_vectors[0].ib = 2000000000;
 	mdp_1080p_vectors[1].ab = 2000000000;
