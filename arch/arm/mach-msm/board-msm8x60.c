@@ -1542,7 +1542,7 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 };
 #endif
 
-#ifdef CONFIG_BATTERY_MSM8X60
+#if defined(CONFIG_BATTERY_MSM8X60) || defined(CONFIG_SKY_BATTERY_MAX17043)
 static int msm_hsusb_pmic_vbus_notif_init(void (*callback)(int online),
 								int init)
 {
@@ -1602,14 +1602,14 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	.vbus_power = msm_hsusb_vbus_power,
 #endif
-#ifdef CONFIG_BATTERY_MSM8X60
+#if defined(CONFIG_BATTERY_MSM8X60) || defined(CONFIG_SKY_BATTERY_MAX17043)
 	.pmic_vbus_notif_init	= msm_hsusb_pmic_vbus_notif_init,
 #endif
 	.ldo_init		 = msm_hsusb_ldo_init,
 	.ldo_enable		 = msm_hsusb_ldo_enable,
 	.config_vddcx            = msm_hsusb_config_vddcx,
 	.init_vddcx              = msm_hsusb_init_vddcx,
-#ifdef CONFIG_BATTERY_MSM8X60
+#if defined(CONFIG_BATTERY_MSM8X60) || defined(CONFIG_SKY_BATTERY_MAX17043)
 	.chg_vbus_draw = msm_charger_vbus_draw,
 #endif
 };
@@ -2764,6 +2764,13 @@ static struct i2c_board_info msm_camera_dragon_boardinfo[] __initdata = {
 #endif
 #endif
 
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+static struct i2c_board_info max17043_i2c_boardinfo[] ={
+	{  
+		I2C_BOARD_INFO("max17043", 0x36),
+	},
+};
+#endif //CONFIG_SKY_BATTERY_MAX17043
 #ifdef CONFIG_MSM_GEMINI
 static struct resource msm_gemini_resources[] = {
 	{
@@ -2839,6 +2846,13 @@ static struct msm_i2c_platform_data msm_gsbi10_qup_i2c_pdata = {
 };
 #endif
 
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+static struct msm_i2c_platform_data msm_gsbi11_qup_i2c_pdata = {
+	.clk_freq = 100000,
+	.src_clk_rate = 24000000,
+	.msm_i2c_config_gpio = gsbi_qup_i2c_gpio_config,
+};
+#endif //CONFIG_SKY_BATTERY_MAX17043
 static struct msm_i2c_platform_data msm_gsbi12_qup_i2c_pdata = {
 	.clk_freq = 100000,
 	.src_clk_rate = 24000000,
@@ -4143,11 +4157,12 @@ static struct platform_device fluid_leds_gpio = {
 
 #endif
 
-#ifdef CONFIG_BATTERY_MSM8X60
+
+#if defined(CONFIG_BATTERY_MSM8X60) || defined(CONFIG_SKY_BATTERY_MAX17043)
 static struct msm_charger_platform_data msm_charger_data = {
-	.safety_time = 180,
+	.safety_time = 480,
 	.update_time = 1,
-	.max_voltage = 4200,
+	.max_voltage = 4350,
 	.min_voltage = 3200,
 };
 
@@ -5942,6 +5957,10 @@ static struct platform_device *surf_devices[] __initdata = {
 #if defined(CONFIG_PN544)
 	&msm_gsbi10_qup_i2c_device,
 #endif
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+	&msm_gsbi11_qup_i2c_device,
+#endif	//CONFIG_SKY_BATTERY_MAX17043
+
 #if defined(CONFIG_SERIAL_MSM_HS) || defined(CONFIG_PANTECH_BT) //lsi@ps2.bluez
 	&msm_device_uart_dm1,
 #endif
@@ -8230,6 +8249,15 @@ static struct i2c_registry msm8x60_i2c_devices[] __initdata = {
 		ARRAY_SIZE(smb137b_charger_i2c_info),
 	},
 #endif
+
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+	{
+		I2C_SURF | I2C_FFA | I2C_FLUID,
+		MSM_GSBI11_QUP_I2C_BUS_ID,
+		max17043_i2c_boardinfo,
+		ARRAY_SIZE(max17043_i2c_boardinfo),
+	},
+#endif
 #if defined(CONFIG_BATTERY_BQ27520) || \
 		defined(CONFIG_BATTERY_BQ27520_MODULE)
 	{
@@ -8385,6 +8413,9 @@ static void __init msm8x60_init_buses(void)
 #if defined(CONFIG_PN544)
 	msm_gsbi10_qup_i2c_device.dev.platform_data = &msm_gsbi10_qup_i2c_pdata;
 #endif
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+	msm_gsbi11_qup_i2c_device.dev.platform_data = &msm_gsbi11_qup_i2c_pdata;
+#endif //CONFIG_SKY_BATTERY_MAX17043
 	msm_gsbi12_qup_i2c_device.dev.platform_data = &msm_gsbi12_qup_i2c_pdata;
 #if defined(CONFIG_EF65L_SENSORS_MPU3050)
 	msm_gsbi5_qup_i2c_device.dev.platform_data = &msm_gsbi5_qup_i2c_pdata;
@@ -11384,6 +11415,30 @@ static struct msm_board_data msm8x60_dragon_board_data __initdata = {
 	.gpiomux_cfgs = msm8x60_dragon_gpiomux_cfgs,
 };
 
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+static unsigned max17043_config_gpio[] = {
+	/* FUEL_I2C_SCL */
+	GPIO_CFG(103, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* FUEL_I2C_SDA */
+	GPIO_CFG(104, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA),
+};
+
+static void max17043_init(void)
+{
+	int rc = 0;
+	int pin = 0;
+	printk(KERN_ERR "%s: \n",__func__);
+	for (pin = 0; pin < ARRAY_SIZE(max17043_config_gpio); pin++) {
+		rc = gpio_tlmm_config(max17043_config_gpio[pin], GPIO_CFG_ENABLE);
+		if (rc) {
+			printk(KERN_ERR "%s: gpio_tlmm_config(%#x)=%d\n",
+			__func__, max17043_config_gpio[pin], rc);
+		}
+	}
+}
+
+#endif //CONFIG_SKY_BATTERY_MAX17043
+
 //pz1946 20110907 interrupt pin change
 #if defined(CONFIG_SKY_SMB136S_CHARGER)
 static unsigned smb137b_config_gpio[] = {
@@ -11530,7 +11585,7 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 		ov9726_sensor_8660_info.mount_angle = 270;
 	}
 #endif
-#ifdef CONFIG_BATTERY_MSM8X60
+#if defined(CONFIG_BATTERY_MSM8X60) || defined(CONFIG_SKY_BATTERY_MAX17043)
 	if (machine_is_msm8x60_surf() || machine_is_msm8x60_ffa() ||
 		machine_is_msm8x60_fusion() || machine_is_msm8x60_dragon() ||
 		machine_is_msm8x60_fusn_ffa() || machine_is_msm8x60_fluid())
@@ -11702,6 +11757,10 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 #ifdef CONFIG_PANTECH_BT
 	bt_power_init();
 #endif // CONFIG_PANTECH_BT
+
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+	max17043_init();
+#endif //CONFIG_SKY_BATTERY_MAX17043
 
 #if defined(CONFIG_SKY_SMB136S_CHARGER)
     smb137b_hw_init();

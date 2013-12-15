@@ -56,7 +56,8 @@ enum pmic8058_chg_state {
 	PMIC8058_CHG_STATE_PAUSE_TRKL_CHG
 };
 
-#if defined(CONFIG_BATTERY_MSM8X60) || defined(CONFIG_BATTERY_MSM8X60_MODULE)
+//#if defined(CONFIG_BATTERY_MSM8X60) || defined(CONFIG_BATTERY_MSM8X60_MODULE)
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
 int pmic8058_get_charge_batt(void);
 int pmic8058_set_charge_batt(int);
 /**

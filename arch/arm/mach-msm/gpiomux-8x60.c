@@ -410,7 +410,13 @@ static struct gpiomux_setting gsbi9 = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 #endif
-
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+static struct gpiomux_setting gsbi11 = {
+	.func = GPIOMUX_FUNC_2,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+#endif  //CONFIG_SKY_BATTERY_MAX17043
 static struct gpiomux_setting ap2mdm_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_8MA,
@@ -600,6 +606,21 @@ static struct msm_gpiomux_config msm8x60_fluid_gsbi_configs[] __initdata = {
 		},
 	},
 #endif
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+	{
+		.gpio = 104, // sda
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi11,
+		},
+	},
+	{
+		.gpio = 103, // scl
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gsbi11,
+		},
+	},
+#endif  //CONFIG_SKY_BATTERY_MAX17043
+
 };
 
 static struct msm_gpiomux_config msm8x60_ebi2_configs[] __initdata = {

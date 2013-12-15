@@ -133,6 +133,7 @@
 #define PM8058_CHG_I_TERM_STEP_MA 10
 #define PM8058_CHG_V_STEP_MV 25
 #define PM8058_CHG_V_MIN_MV  2400
+
 /*
  * enum pmic_chg_interrupts: pmic interrupts
  * @CHGVAL_IRQ: charger V between 3.3 and 7.9
@@ -224,6 +225,9 @@ static int pm8058_is_battery_id_valid(void);
 extern unsigned int msm_charger_is_incall(void);
 #endif //CONFIG_SKY_SMB136S_CHARGER
 
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+extern int max17040_get_voltage(void);
+#endif //CONFIG_SKY_BATTERY_MAX17043
 
 static int msm_battery_gauge_alarm_notify(struct notifier_block *nb,
 					  unsigned long status, void *unused);
@@ -1961,7 +1965,11 @@ static int pm8058_get_battery_mvolts(void)
 {
 	int vbatt_mv;
 
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+	vbatt_mv=max17040_get_voltage();
+#else  //CONFIG_SKY_BATTERY_MAX17043
 	vbatt_mv = batt_read_adc(CHANNEL_ADC_VBATT, NULL);
+#endif //CONFIG_SKY_BATTERY_MAX17043
 	pr_debug("%s: vbatt_mv is %d\n", __func__, vbatt_mv);
 	if (vbatt_mv > 0)
 		return vbatt_mv;

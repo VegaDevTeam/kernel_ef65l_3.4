@@ -31,6 +31,10 @@
 #define MSM_SMB_I2C_BUS_ID 39
 #endif
 
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+#define MSM_GSBI11_QUP_I2C_BUS_ID	16
+#endif
+
 #ifdef CONFIG_SND_SOC_MSM8660_APQ
 extern struct platform_device msm_pcm;
 extern struct platform_device msm_pcm_routing;
