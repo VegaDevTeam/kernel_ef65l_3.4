@@ -44,7 +44,7 @@
 #include <linux/android_pmem.h>
 #endif
 
-#if defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
 #include <linux/i2c/smb137b.h>
 #endif
 #ifdef CONFIG_SND_SOC_WM8903
@@ -130,6 +130,11 @@
 #define NFC_SLAVE_ADDR		    0x28	
 #endif
 
+//pz1946 20110907 interrupt pin change
+#if (defined(CONFIG_SKY_SMB136S_CHARGER)
+#define SC_DET_IRQ_GPIO	8
+#define SC_STAT_IRQ_GPIO	63
+#endif
 
 #define MSM_SHARED_RAM_PHYS 0x40000000
 #define MDM2AP_SYNC 129
@@ -671,6 +676,24 @@ static struct platform_device qcedev_device = {
 		.coherent_dma_mask = DMA_BIT_MASK(32),
 		.platform_data = &qcedev_ce_hw_suppport,
 	},
+};
+#endif
+
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+#define GPIO_SC_SCL      10
+#define GPIO_SC_SDA      9
+static struct i2c_gpio_platform_data i2c_gpio_smb_data = {
+        .scl_pin = GPIO_SC_SCL,
+        .sda_pin = GPIO_SC_SDA,
+        .udelay = 5,    /* 100 KHz */
+};
+
+struct platform_device msm_device_i2c_gpio_smb = {
+        .name = "i2c-gpio",
+        .id = MSM_SMB_I2C_BUS_ID,
+        .dev = {
+                .platform_data = &i2c_gpio_smb_data,
+        }
 };
 #endif
 
@@ -1454,7 +1477,7 @@ static int msm_hsusb_ldo_enable(int on)
  }
 #endif
 #ifdef CONFIG_USB_EHCI_MSM_72K
-#if defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
 static void msm_hsusb_smb137b_vbus_power(unsigned phy_info, int on)
 {
 	static int vbus_is_on;
@@ -1525,7 +1548,7 @@ static int msm_hsusb_pmic_vbus_notif_init(void (*callback)(int online),
 {
 	int ret = -ENOTSUPP;
 
-#if defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
 	if (machine_is_msm8x60_fluid()) {
 		if (init)
 			msm_charger_register_vbus_sn(callback);
@@ -5577,10 +5600,12 @@ static void pmic8058_xoadc_mpp_config(void)
 #endif							
 		PM8058_MPP_INIT(XOADC_MPP_5, A_INPUT, PM8XXX_MPP_AIN_AMUX_CH9,
 							AOUT_CTRL_DISABLE),
+#if 0	//ndef CONFIG_SKY_CHARGING  //p14682 kobj 110816
 		PM8058_MPP_INIT(XOADC_MPP_7, A_INPUT, PM8XXX_MPP_AIN_AMUX_CH6,
 							AOUT_CTRL_DISABLE),
 		PM8058_MPP_INIT(XOADC_MPP_8, A_INPUT, PM8XXX_MPP_AIN_AMUX_CH8,
 							AOUT_CTRL_DISABLE),
+#endif
 		PM8058_MPP_INIT(XOADC_MPP_10, A_INPUT, PM8XXX_MPP_AIN_AMUX_CH7,
 							AOUT_CTRL_DISABLE),
 		PM8901_MPP_INIT(XOADC_MPP_4, D_OUTPUT, PM8901_MPP_DIG_LEVEL_S4,
@@ -5609,10 +5634,14 @@ static int pmic8058_xoadc_vreg_config(int on)
 			pr_err("%s: Enable of regulator ldo18_adc "
 						"failed\n", __func__);
 	} else {
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+		rc = 0;
+#else  //CONFIG_SKY_CHARGING
 		rc = regulator_disable(vreg_ldo18_adc);
 		if (rc)
 			pr_err("%s: Disable of regulator ldo18_adc "
 						"failed\n", __func__);
+#endif  //CONFIG_SKY_CHARGING
 	}
 
 	return rc;
@@ -5985,6 +6014,11 @@ static struct platform_device *surf_devices[] __initdata = {
 #ifdef CONFIG_FB_MSM_MIPI_DSI_NOVATEK
 	&mipi_dsi_novatek_panel_device,
 #endif
+
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER) 
+    &msm_device_i2c_gpio_smb,
+#endif
+
 #ifdef CONFIG_MSM_CAMERA
 #ifndef CONFIG_MSM_CAMERA_V4L2
 #ifdef CONFIG_MT9E013
@@ -6376,6 +6410,8 @@ static void __init msm8x60_reserve(void)
 	msm_reserve();
 }
 
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+#else
 #define EXT_CHG_VALID_MPP 10
 #define EXT_CHG_VALID_MPP_2 11
 
@@ -6385,6 +6421,7 @@ static struct pm8xxx_mpp_init_info isl_mpp[] = {
 	PM8058_MPP_INIT(EXT_CHG_VALID_MPP_2, D_BI_DIR,
 		PM8058_MPP_DIG_LEVEL_S3, BI_PULLUP_10KOHM),
 };
+#endif
 
 #ifdef CONFIG_ISL9519_CHARGER
 static int isl_detection_setup(void)
@@ -6423,11 +6460,17 @@ static struct i2c_board_info isl_charger_i2c_info[] __initdata = {
 };
 #endif
 
-#if defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SMB137B_CHARGER) || defined(CONFIG_SMB137B_CHARGER_MODULE)
 static int smb137b_detection_setup(void)
 {
-	int ret = 0, i;
+	int ret = 0;
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+#else
+	int i;
+#endif
 
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+#else
 	for (i = 0; i < ARRAY_SIZE(isl_mpp); i++) {
 		ret = pm8xxx_mpp_config(isl_mpp[i].mpp,
 					&isl_mpp[i].config);
@@ -6437,20 +6480,38 @@ static int smb137b_detection_setup(void)
 			return ret;
 		}
 	}
+#endif
 
 	return ret;
 }
 
 static struct smb137b_platform_data smb137b_data __initdata = {
 	.chg_detection_config = smb137b_detection_setup,
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+	.chg_det_gpio = SC_DET_IRQ_GPIO,
+	.valid_n_gpio = SC_STAT_IRQ_GPIO,
+#else
 	.valid_n_gpio = PM8058_MPP_PM_TO_SYS(10),
+#endif
 	.batt_mah_rating = 950,
 };
 
 static struct i2c_board_info smb137b_charger_i2c_info[] __initdata = {
 	{
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+		I2C_BOARD_INFO("smb137b", 0x9A >> 1),
+#else
 		I2C_BOARD_INFO("smb137b", 0x08),
-		.irq = PM8058_IRQ_BASE + PM8058_CBLPWR_IRQ,
+#endif
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+	.irq = MSM_GPIO_TO_INT(SC_DET_IRQ_GPIO),
+#else		
+	.irq = MSM_GPIO_TO_INT(SC_STAT_IRQ_GPIO),
+#endif		
+#else
+	.irq = MSM_GPIO_TO_INT(SC_STAT_IRQ_GPIO),
+#endif		
 		.platform_data = &smb137b_data,
 	},
 };
@@ -8346,6 +8407,7 @@ static void __init msm8x60_init_buses(void)
 	if (machine_is_msm8x60_fluid()) {
 #if (defined(CONFIG_USB_EHCI_MSM_72K) && \
 	(defined(CONFIG_SMB137B_CHARGER) || \
+	 defined(CONFIG_SKY_SMB136S_CHARGER) || \
 	 defined(CONFIG_SMB137B_CHARGER_MODULE)))
 		msm_otg_pdata.vbus_power = msm_hsusb_smb137b_vbus_power;
 #endif
@@ -9812,6 +9874,22 @@ static void lcdc_samsung_panel_power(int on)
 	mipi_dsi_panel_power(0); /* set 8058_ldo0 to LPM */
 }
 #endif
+
+//pz1946 20111002 leakeage current recover
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+// paiksun... trickle
+void gpio_set_132_trickle_leakeage(void)
+{
+	int rc = 0;
+
+	rc = gpio_tlmm_config(GPIO_CFG(132, 0, GPIO_CFG_OUTPUT,	GPIO_CFG_PULL_DOWN, GPIO_CFG_8MA),GPIO_CFG_ENABLE);
+	if (!rc) {
+		gpio_set_value_cansleep(132,1);
+		mdelay(200);
+		gpio_set_value_cansleep(132,0);
+	}
+}
+#endif 
 
 #ifdef CONFIG_FB_MSM_HDMI_MSM_PANEL
 #define _GET_REGULATOR(var, name) do {				\
@@ -11306,6 +11384,35 @@ static struct msm_board_data msm8x60_dragon_board_data __initdata = {
 	.gpiomux_cfgs = msm8x60_dragon_gpiomux_cfgs,
 };
 
+//pz1946 20110907 interrupt pin change
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+static unsigned smb137b_config_gpio[] = {
+//	GPIO_CFG(SC_DET_IRQ_GPIO, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),  
+	GPIO_CFG(GPIO_SC_SDA, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA),  
+	GPIO_CFG(GPIO_SC_SCL, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA),  
+       GPIO_CFG(SC_STAT_IRQ_GPIO, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA),    
+	GPIO_CFG(28, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),  
+	GPIO_CFG(155, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA),  
+};
+
+static void smb137b_hw_init(void) 
+{
+        int rc = 0;
+        int pin = 0;
+        printk(KERN_ERR "%s: \n",__func__);
+        for (pin = 0; pin < ARRAY_SIZE(smb137b_config_gpio); pin++) {
+                rc = gpio_tlmm_config(smb137b_config_gpio[pin], GPIO_CFG_ENABLE);
+                if (rc) {
+                        printk(KERN_ERR "%s: gpio_tlmm_config(%#x)=%d\n",
+                        __func__, smb137b_config_gpio[pin], rc);
+                }
+        }
+		
+	gpio_set_value(155, 1);
+	gpio_set_value(28, 0);
+}
+#endif
+
 static void __init msm8x60_init(struct msm_board_data *board_data)
 {
 	uint32_t soc_platform_version;
@@ -11596,6 +11703,11 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 	bt_power_init();
 #endif // CONFIG_PANTECH_BT
 
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+    smb137b_hw_init();
+	i2c_register_board_info(MSM_SMB_I2C_BUS_ID, smb137b_charger_i2c_info,
+			ARRAY_SIZE(smb137b_charger_i2c_info));
+#endif
 #endif
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 	msm8x60_wlan_init();

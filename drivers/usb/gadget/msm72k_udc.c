@@ -336,6 +336,14 @@ static int usb_get_max_power(struct usb_info *ui)
 		return USB_WALLCHARGER_CHG_CURRENT;
 	else if (ui->pdata->prop_chg)
 		return USB_PROPRIETARY_CHG_CURRENT;
+		
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+	if(suspended && (temp == USB_CHG_TYPE__SDP))
+		return 500;
+
+	if((ui->usb_state == USB_STATE_ADDRESS) && (temp == USB_CHG_TYPE__SDP))
+		return 500;		
+#endif  //CONFIG_SKY_SMB136S_CHARGER
 
 	if (suspended || !configured)
 		return 0;

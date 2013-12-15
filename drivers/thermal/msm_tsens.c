@@ -535,6 +535,18 @@ static const struct dev_pm_ops tsens_pm_ops = {
 };
 #endif
 
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+static struct thermal_zone_device *msm_thermal = NULL;
+
+int tsens_tz_get_temp_charging(unsigned long *temp)
+{
+        if(!msm_thermal)
+                return -1;
+        
+        return tsens_tz_get_temp(msm_thermal, temp);
+}
+#endif
+
 static int __devinit tsens_tm_probe(struct platform_device *pdev)
 {
 	unsigned int reg, i, calib_data, calib_data_backup;
@@ -603,6 +615,10 @@ static int __devinit tsens_tm_probe(struct platform_device *pdev)
 		tmdev->sensor[i].mode = THERMAL_DEVICE_DISABLED;
 	}
 
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+        msm_thermal = tmdev->sensor[0].tz_dev;
+#endif
+        
 	rc = request_threaded_irq(TSENS_UPPER_LOWER_INT, tsens_isr,
 		tsens_isr_thread, 0, "tsens", tmdev);
 	if (rc < 0) {

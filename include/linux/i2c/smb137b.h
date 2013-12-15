@@ -23,10 +23,18 @@
  * @batt_mah_rating:		the battery current rating
  */
 struct smb137b_platform_data {
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+	int chg_det_gpio;
+#endif
 	int valid_n_gpio;
 	int (*chg_detection_config) (void);
 	int batt_mah_rating;
 };
+
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+void notify_event_charging_done(void);
+void notify_event_recharging(void);
+#endif
 
 void smb137b_otg_power(int on);
 

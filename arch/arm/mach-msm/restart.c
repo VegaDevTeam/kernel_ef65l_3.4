@@ -116,6 +116,16 @@ EXPORT_SYMBOL(msm_set_restart_mode);
 
 static void __msm_power_off(int lower_pshold)
 {
+//pz1946 20111230 v1.34 reset debug
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+	printk(KERN_ERR "msm_power_off ioremap_nocache\n");
+	//restart_reason = ioremap_nocache(RESTART_REASON_ADDR, SZ_4K);
+	writel(0x00, restart_reason);
+	printk(KERN_ERR "msm_power_off writel\n");
+	writel(0x00, restart_reason+4);
+	//iounmap(restart_reason);
+	printk(KERN_ERR "msm_power_off iounmap\n");
+#endif  //CONFIG_SKY_SMB136S_CHARGER
 	printk(KERN_CRIT "Powering off the SoC\n");
 #ifdef CONFIG_MSM_DLOAD_MODE
 	set_dload_mode(0);

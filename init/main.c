@@ -128,6 +128,15 @@ static char *static_command_line;
 static char *execute_command;
 static char *ramdisk_execute_command;
 
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+static unsigned int battchg_pause_logo;
+
+unsigned int sky_charging_status(void)
+{
+	return battchg_pause_logo;
+}
+EXPORT_SYMBOL(sky_charging_status);
+#endif //CONFIG_SKY_SMB136S_CHARGER
 /*
  * If set, this is an indication to the drivers that reset the underlying
  * device before going ahead with the initialization otherwise driver might
@@ -511,6 +520,11 @@ asmlinkage void __init start_kernel(void)
 	parse_args("Booting kernel", static_command_line, __start___param,
 		   __stop___param - __start___param,
 		   0, 0, &unknown_bootoption);
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+	if (strstr(boot_command_line,"androidboot.battchg_pause=true")) {
+		battchg_pause_logo = 1;
+	}
+#endif  //CONFIG_SKY_SMB136S_CHARGER
 
 	jump_label_init();
 

@@ -334,6 +334,16 @@ config SMB137B_CHARGER
 	  To compile this driver as a module, choose M here: the module will
 	  be called smb137b.
 
+config SKY_SMB136S_CHARGER
+	tristate "smb136s charger"
+        depends on I2C
+        help
+          The smb136s charger chip from summit is a switching mode based
+          charging solution.
+          Choose Y if you are compiling for Qualcomm's msm8x60 fluid board.
+          To compile this driver as a module, choose M here: the module will
+          be called smb136s.
+	  
 config SMB349_CHARGER
 	tristate "smb349 charger"
 	depends on I2C

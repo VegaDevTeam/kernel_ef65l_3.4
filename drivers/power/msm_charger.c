@@ -29,16 +29,27 @@
 
 #include <mach/msm_hsusb.h>
 
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#include <linux/reboot.h>
+#include <mach/system.h>
+#endif  //CONFIG_SKY_SMB136S_CHARGER
 #define MSM_CHG_MAX_EVENTS		16
 #define CHARGING_TEOC_MS		9000000
 #define UPDATE_TIME_MS			60000
 #define RESUME_CHECK_PERIOD_MS		60000
 
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#define DEFAULT_BATT_MAX_V		4350
+#else
 #define DEFAULT_BATT_MAX_V		4200
+#endif
 #define DEFAULT_BATT_MIN_V		3200
 
 #define MSM_CHARGER_GAUGE_MISSING_VOLTS 3500
 #define MSM_CHARGER_GAUGE_MISSING_TEMP  35
+
+#define SKY_BATTERY_INFO //2011.09.15 leecy add for battery info
+
 /**
  * enum msm_battery_status
  * @BATT_STATUS_ABSENT: battery not present
@@ -110,6 +121,10 @@ struct msm_charger_mux {
 	struct wake_lock wl;
 };
 
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+extern atomic_t smb_charger_state;
+#endif
+
 static struct msm_charger_mux msm_chg;
 
 static struct msm_battery_gauge *msm_batt_gauge;
@@ -171,6 +186,19 @@ static int is_battery_id_valid(void)
 	}
 }
 
+
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+static int is_factory_cable(void)
+{
+	if (msm_batt_gauge && msm_batt_gauge->is_factory_cable)
+		return msm_batt_gauge->is_factory_cable();
+	else {
+		pr_err("msm-charger no is_factory_cable\n");
+		return 0;
+	}
+}
+#endif
+
 static int get_prop_battery_mvolts(void)
 {
 	if (msm_batt_gauge && msm_batt_gauge->get_battery_mvolts)
@@ -181,6 +209,7 @@ static int get_prop_battery_mvolts(void)
 	}
 }
 
+#if !(defined(CONFIG_SKY_SMB136S_CHARGER)
 static int get_battery_temperature(void)
 {
 	if (msm_batt_gauge && msm_batt_gauge->get_battery_temperature)
@@ -190,6 +219,8 @@ static int get_battery_temperature(void)
 		return MSM_CHARGER_GAUGE_MISSING_TEMP;
 	}
 }
+
+#endif //CONFIG_SKY_SMB136S_CHARGER
 
 static int get_prop_batt_capacity(void)
 {
@@ -286,15 +317,27 @@ static int msm_power_get_property(struct power_supply *psy,
 				  union power_supply_propval *val)
 {
 	struct msm_hardware_charger_priv *priv;
-
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+	int chg_type;
+#endif
 	priv = container_of(psy, struct msm_hardware_charger_priv, psy);
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = !(priv->hw_chg_state == CHG_ABSENT_STATE);
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
-		val->intval = (priv->hw_chg_state == CHG_READY_STATE)
-			|| (priv->hw_chg_state == CHG_CHARGING_STATE);
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+		chg_type = atomic_read(&smb_charger_state);
+		
+		if(chg_type == CHG_TYPE_USB)
+			val -> intval = 1;
+		else if(chg_type == CHG_TYPE_AC)
+			val -> intval = 2;
+		else if(chg_type == CHG_TYPE_FACTORY)
+			val -> intval = 3;
+		else
+			val -> intval = 0;
+#endif  //CONFIG_SKY_SMB136S_CHARGER
 		break;
 	default:
 		return -EINVAL;
@@ -332,7 +375,11 @@ static int msm_batt_power_get_property(struct power_supply *psy,
 		val->intval = !(msm_chg.batt_status == BATT_STATUS_ABSENT);
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
+#ifdef SKY_BATTERY_INFO		
+		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+#else
 		val->intval = POWER_SUPPLY_TECHNOLOGY_NiMH;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
 		val->intval = msm_chg.max_voltage * 1000;
@@ -482,8 +529,9 @@ static int msm_stop_charging(struct msm_hardware_charger_priv *priv)
 	int ret;
 
 	ret = priv->hw_chg->stop_charging(priv->hw_chg);
-	if (!ret)
-		wake_unlock(&msm_chg.wl);
+// pantech charger issue soyu add
+//	if (!ret)
+//		wake_unlock(&msm_chg.wl);
 	return ret;
 }
 
@@ -507,11 +555,13 @@ static int msm_start_charging(void)
 	struct msm_hardware_charger_priv *priv;
 
 	priv = msm_chg.current_chg_priv;
-	wake_lock(&msm_chg.wl);
+// pantech charger issue soyu add
+//	wake_lock(&msm_chg.wl);
 	ret = priv->hw_chg->start_charging(priv->hw_chg, msm_chg.max_voltage,
 					 priv->max_source_current);
 	if (ret) {
-		wake_unlock(&msm_chg.wl);
+// pantech charger issue soyu add
+//		wake_unlock(&msm_chg.wl);
 		dev_err(msm_chg.dev, "%s couldnt start chg error = %d\n",
 			priv->hw_chg->name, ret);
 	} else
@@ -599,6 +649,7 @@ static void handle_battery_removed(void)
 
 static void update_heartbeat(struct work_struct *work)
 {
+#if !defined(CONFIG_SKY_SMB136S_CHARGER)
 	int temperature;
 
 	if (msm_chg.batt_status == BATT_STATUS_ABSENT
@@ -631,7 +682,7 @@ static void update_heartbeat(struct work_struct *work)
 		temperature = get_battery_temperature();
 		/* TODO implement JEITA SPEC*/
 	}
-
+#endif
 	/* notify that the voltage has changed
 	 * the read of the capacity will trigger a
 	 * voltage read*/
@@ -787,8 +838,12 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 	if (hw_chg)
 		priv = hw_chg->charger_private;
 
+	if (hw_chg)
+		dev_info(msm_chg.dev, "%s event : %d from %s\n", __func__, event, hw_chg->name);
+
 	mutex_lock(&msm_chg.status_lock);
 
+	pr_err("## event : %d ##\n", event);
 	switch (event) {
 	case CHG_INSERTED_EVENT:
 		if (priv->hw_chg_state != CHG_ABSENT_STATE) {
@@ -797,6 +852,10 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 				 hw_chg->name);
 			break;
 		}
+		
+		// pantech charger issue soyu add
+		wake_lock(&msm_chg.wl);
+		
 		update_batt_status();
 		if (hw_chg->type == CHG_TYPE_USB) {
 			priv->hw_chg_state = CHG_PRESENT_STATE;
@@ -812,6 +871,8 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 			priv->hw_chg_state = CHG_READY_STATE;
 			handle_charger_ready(priv);
 		}
+// pantech charger issue soyu add
+//		wake_lock(&msm_chg.wl);
 		break;
 	case CHG_ENUMERATED_EVENT:	/* only in USB types */
 		if (priv->hw_chg_state == CHG_ABSENT_STATE) {
@@ -847,6 +908,8 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 			notify_usb_of_the_plugin_event(priv, 0);
 		}
 		handle_charger_removed(priv, CHG_ABSENT_STATE);
+		// pantech charger issue soyu add
+		wake_unlock(&msm_chg.wl);
 		break;
 	case CHG_DONE_EVENT:
 		if (priv->hw_chg_state == CHG_CHARGING_STATE)
@@ -865,6 +928,8 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 	case CHG_BATT_TEMP_OUTOFRANGE:
 		/* the batt_temp out of range can trigger
 		 * when the battery is absent */
+		dev_info(msm_chg.dev, "%s CHG_BATT_TEMP_OUTOFRANGE\n",
+		hw_chg->name);
 		if (!is_battery_present()
 		    && msm_chg.batt_status != BATT_STATUS_ABSENT) {
 			msm_chg.batt_status = BATT_STATUS_ABSENT;
@@ -877,6 +942,8 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 		handle_battery_removed();
 		break;
 	case CHG_BATT_TEMP_INRANGE:
+		dev_info(msm_chg.dev, "%s CHG_BATT_TEMP_INRANGE\n",
+		hw_chg->name);		
 		if (msm_chg.batt_status != BATT_STATUS_TEMPERATURE_OUT_OF_RANGE)
 			break;
 		msm_chg.batt_status = BATT_STATUS_ID_INVALID;
@@ -911,6 +978,21 @@ static void handle_event(struct msm_hardware_charger *hw_chg, int event)
 			break;
 		msm_chg.batt_status = BATT_STATUS_ABSENT;
 		handle_battery_removed();
+#if defined(CONFIG_SKY_SMB136S_CHARGER)	
+		if (msm_chg.current_chg_priv != NULL
+				&& msm_chg.current_chg_priv->hw_chg_state != CHG_ABSENT_STATE) {
+			if(is_factory_cable() != 1) {
+				if(!is_battery_present()) {			
+					if(msm_chg.current_chg_priv->hw_chg->get_chg_hw_state 
+						&& (msm_chg.current_chg_priv->hw_chg->get_chg_hw_state() == 1)) {
+						pr_err("Battery removed, kernel power off ...\n");
+						//orderly_poweroff(true);
+						arch_reset(0, "oem-34");
+					}
+				}
+			}
+		}
+#endif		
 		break;
 	case CHG_BATT_STATUS_CHANGE:
 		/* TODO  battery SOC like battery-alarm/charging-full features

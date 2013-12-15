@@ -16,6 +16,10 @@
 #include <linux/power_supply.h>
 
 enum {
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+	CHG_TYPE_NONE,
+	CHG_TYPE_FACTORY,
+#endif  //CONFIG_SKY_SMB136S_CHARGER
 	CHG_TYPE_USB,
 	CHG_TYPE_AC
 };
@@ -62,7 +66,9 @@ struct msm_hardware_charger {
 	void (*start_system_current) (struct msm_hardware_charger *hw_chg,
 							int chg_current);
 	void (*stop_system_current) (struct msm_hardware_charger *hw_chg);
-
+#if	defined(CONFIG_SKY_SMB136S_CHARGER)
+	int (*get_chg_hw_state) (void);
+#endif
 	void *charger_private;	/* used by the msm_charger.c */
 };
 
@@ -72,6 +78,9 @@ struct msm_battery_gauge {
 	int (*is_battery_present) (void);
 	int (*is_battery_temp_within_range) (void);
 	int (*is_battery_id_valid) (void);
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+	int (*is_factory_cable) (void);
+#endif  //CONFIG_SKY_SMB136S_CHARGER
 	int (*get_battery_status)(void);
 	int (*get_batt_remaining_capacity) (void);
 	int (*monitor_for_recharging) (void);
