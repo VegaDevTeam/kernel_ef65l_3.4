@@ -130,6 +130,11 @@
 #define NFC_SLAVE_ADDR		    0x28	
 #endif
 
+
+#ifdef CONFIG_SKY_GSBI12_UART_CONSOLE //PZ2223
+#include <linux/mfd/pm8xxx/misc.h>
+#endif /* CONFIG_SKY_GSBI12_UART_CONSOLE PZ2223 */
+
 //pz1946 20110907 interrupt pin change
 #if (defined(CONFIG_SKY_SMB136S_CHARGER)
 #define SC_DET_IRQ_GPIO	8
@@ -6613,6 +6618,54 @@ static int pm8058_gpios_init(void)
 				.inv_int_pol	= 0,
 			}
 		},
+// CONFIG_SKY_GSBI12_UART_CONSOLE, PZ2223
+#ifdef CONFIG_SKY_GSBI12_UART_CONSOLE
+		{ /* UART_TX3 : PM8058 GPIO_23 */
+			PM8058_GPIO_PM_TO_SYS(22),
+			{
+				.direction      = PM_GPIO_DIR_OUT,
+				.pull           = PM_GPIO_PULL_NO,//PM_GPIO_PULL_DN,
+//				.vin_sel        = PM_GPIO_VIN_L6,
+				.vin_sel        = PM_GPIO_VIN_L17,
+				.function       = PM_GPIO_FUNC_2,
+				.inv_int_pol    = 0,
+		}
+		},
+		{ /* UART_RX3 : PM8058 GPIO_35 */
+			PM8058_GPIO_PM_TO_SYS(34),
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_NO,//PM_GPIO_PULL_DN,
+//				.vin_sel        = PM_GPIO_VIN_L6,				
+				.vin_sel        = PM_GPIO_VIN_L17,
+				.function       = PM_GPIO_FUNC_NORMAL,//PM_GPIO_FUNC_2,
+				.inv_int_pol    = 0,
+			}
+		},
+		{ /* UART_M_TX : PM8058 GPIO_36 */
+			PM8058_GPIO_PM_TO_SYS(35),
+			{
+				.direction      = PM_GPIO_DIR_IN,
+				.pull           = PM_GPIO_PULL_NO,//PM_GPIO_PULL_DN,
+//				.vin_sel        = PM_GPIO_VIN_S3
+				.vin_sel        = PM_GPIO_VIN_S4,
+				.function       = PM_GPIO_FUNC_NORMAL,//PM_GPIO_FUNC_2,
+				.inv_int_pol    = 0,
+			}
+		},
+		{ /* UART_M_RX : PM8058 GPIO_37 */
+			PM8058_GPIO_PM_TO_SYS(36),
+			{
+				.direction      = PM_GPIO_DIR_OUT,
+				.pull           = PM_GPIO_PULL_NO,//PM_GPIO_PULL_DN,
+//				.vin_sel        = PM_GPIO_VIN_S3,
+				.vin_sel        = PM_GPIO_VIN_S4,
+				.function       = PM_GPIO_FUNC_2,
+				.inv_int_pol    = 0,
+			}
+		}
+
+#else // CONFIG_SKY_GSBI12_UART_CONSOLE, PZ2223
 		{ /* PMIC ID interrupt */
 			PM8058_GPIO_PM_TO_SYS(36),
 			{
@@ -6623,6 +6676,7 @@ static int pm8058_gpios_init(void)
 				.inv_int_pol	= 0,
 			}
 		},
+#endif // CONFIG_SKY_GSBI12_UART_CONSOLE, PZ2223
 	};
 
 #if defined(CONFIG_TOUCHDISC_VTD518_SHINETSU) || \
@@ -8360,8 +8414,22 @@ static void __init register_i2c_devices(void)
 #endif
 }
 
+//20101015 choiseulkee add for uart console, GSBI12 port UART GPIO config //PZ2223
+#ifdef CONFIG_SKY_GSBI12_UART_CONSOLE
+static uint32_t uart12_config_gpio[] = {
+	GPIO_CFG(117, 2, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	GPIO_CFG(118, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
+};
+#endif
+
 static void __init msm8x60_init_uart12dm(void)
 {
+//20101015 choiseulkee add for uart console, GSBI12 port UART GPIO config //PZ2223
+#ifdef CONFIG_SKY_GSBI12_UART_CONSOLE
+	pr_info("%s: GSBI12 port uart12_config_gpio configuration\n", __func__);
+	gpio_tlmm_config(uart12_config_gpio[0], GPIO_CFG_ENABLE);
+	gpio_tlmm_config(uart12_config_gpio[1], GPIO_CFG_ENABLE);
+#else
 #if !defined(CONFIG_USB_PEHCI_HCD) && !defined(CONFIG_USB_PEHCI_HCD_MODULE)
 	/* 0x1D000000 now belongs to EBI2:CS3 i.e. USB ISP Controller */
 	void *fpga_mem = ioremap_nocache(0x1D000000, SZ_4K);
@@ -8380,6 +8448,7 @@ static void __init msm8x60_init_uart12dm(void)
 	mb();
 	iounmap(fpga_mem);
 #endif
+#endif /* CONFIG_SKY_GSBI12_UART_CONSOLE */
 }
 
 #define MSM_GSBI9_PHYS		0x19900000
@@ -11471,6 +11540,10 @@ static void smb137b_hw_init(void)
 static void __init msm8x60_init(struct msm_board_data *board_data)
 {
 	uint32_t soc_platform_version;
+#ifdef CONFIG_SKY_GSBI12_UART_CONSOLE //PZ2223
+	int ret;
+#endif //CONFIG_SKY_GSBI12_UART_CONSOLE //PZ2223
+
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	struct pm8xxx_mpp_config_data hsusb_phy_mpp = {
 		.type		= PM8XXX_MPP_TYPE_D_OUTPUT,
@@ -11561,7 +11634,9 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 		msm8x60_init_ebi2();
 	msm8x60_init_tlmm();
 	msm8x60_init_gpiomux(board_data->gpiomux_cfgs);
+#ifndef CONFIG_SKY_EF65L_BOARD 
 	msm8x60_init_uart12dm();
+#endif
 #ifdef CONFIG_MSM_CAMERA_V4L2
 	msm8x60_init_cam();
 #endif
@@ -11731,6 +11806,18 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 
 	pm8058_gpios_init();
 
+#ifdef CONFIG_SKY_GSBI12_UART_CONSOLE //PZ2223
+	msm8x60_init_uart12dm();
+	
+	pr_info("%s: pm8xxx_misc_control() -> UART3 MUX CONFIG\n", __func__);
+	ret = pm8xxx_uart_gpio_mux_ctrl( UART_TX3_RX3 );
+
+	if( ret )
+	{
+		pr_info("[Board MSM8x60 UART GPIO] pm8xxx_misc_control() -> UART3 MUX CONFIG Failed \n");
+	}
+#endif //CONFIG_SKY_GSBI12_UART_CONSOLE //PZ2223	
+	
 #ifdef CONFIG_SENSORS_MSM_ADC
 	if (machine_is_msm8x60_fluid()) {
 		msm_adc_pdata.dev_names = msm_adc_fluid_device_names;
