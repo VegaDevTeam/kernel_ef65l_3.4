@@ -245,6 +245,7 @@ void pet_watchdog(void)
 		min_slack_ns = slack_ns;
 	last_pet = time_ns;
 }
+EXPORT_SYMBOL(pet_watchdog);	// STV: jhkang
 
 static void pet_watchdog_work(struct work_struct *work)
 {

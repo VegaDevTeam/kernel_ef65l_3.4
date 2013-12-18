@@ -357,6 +357,12 @@ static int __init charm_modem_probe(struct platform_device *pdev)
 	gpio_direction_input(MDM2AP_STATUS);
 	gpio_direction_input(MDM2AP_ERRFATAL);
 
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+	gpio_direction_output(AP2MDM_PMIC_RESET_N, 1);
+	msleep(4000);
+	gpio_direction_output(AP2MDM_PMIC_RESET_N, 0);
+#endif
+
 	power_on_charm = d->charm_modem_on;
 	power_down_charm = d->charm_modem_off;
 
@@ -465,7 +471,10 @@ static void charm_modem_shutdown(struct platform_device *pdev)
 			break;
 	}
 
-	if (i <= 0) {
+  #ifndef CONFIG_MACH_MSM8X60_EF65L
+	if (i <= 0)
+  #endif
+	{
 		pr_err("%s: MDM2AP_STATUS never went low.\n",
 			 __func__);
 		gpio_direction_output(AP2MDM_PMIC_RESET_N, 1);

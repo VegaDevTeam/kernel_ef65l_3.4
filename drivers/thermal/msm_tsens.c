@@ -26,6 +26,10 @@
 #include <mach/msm_iomap.h>
 #include <linux/pm.h>
 
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+#include <linux/gpio.h>
+#endif
+
 /* Trips: from very hot to very cold */
 enum tsens_trip_type {
 	TSENS_TRIP_STAGE3 = 0,
@@ -183,6 +187,22 @@ static int tsens_tz_set_mode(struct thermal_zone_device *thermal,
 		writel(reg, TSENS_CNTL_ADDR);
 	}
 	tm_sensor->mode = mode;
+
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+	{
+		pr_info("%s: 134 gpio_get_value: %d\n", __func__, gpio_get_value(134));
+		if (gpio_get_value(134) == 0)
+		{
+		       if (gpio_get_value(134) == 0)
+		       {
+				gpio_direction_output(131, 1);
+			       msleep(4000);
+				gpio_direction_output(131, 0);
+				panic("MDM Status PIN is 0 , MDM reset now\n");
+			}
+		}
+	}
+#endif
 
 	return 0;
 }

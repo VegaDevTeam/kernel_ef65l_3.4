@@ -133,7 +133,8 @@
 #define PM8058_CHG_I_TERM_STEP_MA 10
 #define PM8058_CHG_V_STEP_MV 25
 #define PM8058_CHG_V_MIN_MV  2400
-
+//pz1946 20111001 charging status only batt id check
+extern int smb_charger_state;
 /*
  * enum pmic_chg_interrupts: pmic interrupts
  * @CHGVAL_IRQ: charger V between 3.3 and 7.9

@@ -237,6 +237,7 @@ obj-$(CONFIG_MACH_MSM8X60_FLUID) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_DRAGON) += board-msm8x60.o
 obj-$(CONFIG_MACH_TYPE_MSM8X60_FUSION) += board-msm8x60.o mdm.o
 obj-$(CONFIG_MACH_MSM8X60_FUSN_FFA) += board-msm8x60.o mdm.o
+obj-$(CONFIG_MACH_MSM8X60_EF65L) += board-msm8x60.o mdm.o
 obj-$(CONFIG_TROUT_H2W) += board-trout-h2w.o
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 obj-$(CONFIG_TROUT_PWRSINK) += htc_pwrsink.o

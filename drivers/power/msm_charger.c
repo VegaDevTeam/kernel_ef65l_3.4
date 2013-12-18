@@ -128,6 +128,14 @@ extern atomic_t smb_charger_state;
 static struct msm_charger_mux msm_chg;
 
 static struct msm_battery_gauge *msm_batt_gauge;
+#if defined(CONFIG_SKY_BATTERY_MAX17040) || defined(CONFIG_SKY_BATTERY_MAX17043)
+extern int max17040_get_charge_state(void);
+extern int is_max17040_capable_of_charging(void);
+#endif
+
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+extern int pmic8058_tz_get_temp_charging(unsigned long *temp);
+#endif
 
 static int is_chg_capable_of_charging(struct msm_hardware_charger_priv *priv)
 {
@@ -155,6 +163,13 @@ static int is_batt_status_charging(void)
 		return 1;
 	return 0;
 }
+
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+int sky_get_plug_state(void)
+{
+        return is_batt_status_charging();
+}
+#endif  //CONFIG_SKY_BATTERY_MAX17043
 
 static int is_battery_present(void)
 {
@@ -222,6 +237,7 @@ static int get_battery_temperature(void)
 
 #endif //CONFIG_SKY_SMB136S_CHARGER
 
+#if !defined(CONFIG_SKY_BATTERY_MAX17043)
 static int get_prop_batt_capacity(void)
 {
 	int capacity;
@@ -236,6 +252,7 @@ static int get_prop_batt_capacity(void)
 
 	return capacity;
 }
+#endif  //CONFIG_SKY_BATTERY_MAX17043
 
 static int get_prop_batt_health(void)
 {
@@ -266,7 +283,9 @@ static int get_prop_charge_type(void)
 static int get_prop_batt_status(void)
 {
 	int status = 0;
-
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+	int state = 0;
+#endif
 	if (msm_batt_gauge && msm_batt_gauge->get_battery_status) {
 		status = msm_batt_gauge->get_battery_status();
 		if (status == POWER_SUPPLY_STATUS_CHARGING ||
@@ -275,6 +294,28 @@ static int get_prop_batt_status(void)
 			return status;
 	}
 
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+        if (is_batt_status_charging())
+        {
+                state=max17040_get_charge_state();
+                if(state)
+                        status = POWER_SUPPLY_STATUS_FULL;
+                else
+                        status = POWER_SUPPLY_STATUS_CHARGING;				
+        }
+        else if (msm_chg.batt_status ==
+                BATT_STATUS_JUST_FINISHED_CHARGING
+                && msm_chg.current_chg_priv != NULL)
+        {
+                state=max17040_get_charge_state();
+                if(state)
+                        status = POWER_SUPPLY_STATUS_FULL;
+                else
+                        status = POWER_SUPPLY_STATUS_CHARGING;				
+        }
+        else
+                status = POWER_SUPPLY_STATUS_DISCHARGING;
+#else
 	if (is_batt_status_charging())
 		status = POWER_SUPPLY_STATUS_CHARGING;
 	else if (msm_chg.batt_status ==
@@ -283,6 +324,7 @@ static int get_prop_batt_status(void)
 		status = POWER_SUPPLY_STATUS_FULL;
 	else
 		status = POWER_SUPPLY_STATUS_DISCHARGING;
+#endif
 
 	return status;
 }
@@ -311,6 +353,8 @@ static enum power_supply_property msm_power_props[] = {
 static char *msm_power_supplied_to[] = {
 	"battery",
 };
+//pz1946 20111108 position change here
+static struct msm_hardware_charger_priv *usb_hw_chg_priv;
 
 static int msm_power_get_property(struct power_supply *psy,
 				  enum power_supply_property psp,
@@ -353,8 +397,10 @@ static enum power_supply_property msm_batt_power_props[] = {
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
+#if !defined(CONFIG_SKY_BATTERY_MAX17043)
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
+#endif	//CONFIG_SKY_BATTERY_MAX17043
 };
 
 static int msm_batt_power_get_property(struct power_supply *psy,
@@ -387,12 +433,16 @@ static int msm_batt_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
 		val->intval = msm_chg.min_voltage * 1000;
 		break;
+#if !defined(CONFIG_SKY_BATTERY_MAX17043)
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		val->intval = get_prop_battery_mvolts();
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = get_prop_batt_capacity();
+		//20110323 choiseulkee chg for EF39S bring-up, please check Battery
+		val->intval = 100;
 		break;
+#endif  //CONFIG_SKY_BATTERY_MAX17043
 	default:
 		return -EINVAL;
 	}
@@ -408,7 +458,8 @@ static struct power_supply msm_psy_batt = {
 };
 
 static int usb_chg_current;
-static struct msm_hardware_charger_priv *usb_hw_chg_priv;
+//pz1946 20111108 position change
+//static struct msm_hardware_charger_priv *usb_hw_chg_priv;
 static void (*notify_vbus_state_func_ptr)(int);
 static int usb_notified_of_insertion;
 
@@ -743,8 +794,11 @@ static void handle_charger_ready(struct msm_hardware_charger_priv *hw_chg_priv)
 		 */
 		if (old_chg_priv != NULL)
 			msm_disable_system_current(old_chg_priv);
-
+#if defined(CONFIG_SKY_BATTERY_MAX17043)
+		if (!is_batt_status_capable_of_charging() && !is_max17040_capable_of_charging())
+#else		
 		if (!is_batt_status_capable_of_charging())
+#endif			
 			return;
 
 		/* start charging from the new charger */

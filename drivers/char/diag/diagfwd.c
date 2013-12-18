@@ -116,7 +116,11 @@ static int has_device_tree(void)
 int chk_config_get_id(void)
 {
 	/* For all Fusion targets, Modem will always be present */
-	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())
+	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+		|| machine_is_msm8x60_ef65l()
+#endif
+	)
 		return 0;
 
 	if (driver->use_device_tree) {
@@ -382,7 +386,11 @@ int diag_device_write(void *buf, int proc_num, struct diag_request *write_ptr)
 #ifdef CONFIG_DIAG_SDIO_PIPE
 		else if (proc_num == SDIO_DATA) {
 			if (machine_is_msm8x60_fusion() ||
-					 machine_is_msm8x60_fusn_ffa()) {
+					 machine_is_msm8x60_fusn_ffa()
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+					|| machine_is_msm8x60_ef65l()
+#endif
+					 ) {
 				write_ptr->buf = buf;
 				err = usb_diag_write(driver->mdm_ch, write_ptr);
 			} else
@@ -967,6 +975,173 @@ void diag_send_msg_mask_update(smd_channel_t *ch, int updated_ssid_first,
 	mutex_unlock(&driver->diag_cntl_mutex);
 }
 
+#if 1  //im.seho nv_backup 20111003
+//#ifdef CONFIG_PANTECH_SKY
+enum
+{
+  FACTORY_CS_AUTO_INFO_I         = 1,
+  FACTORY_CS_AUTO_LAYER1_I       = 2, // 0x2-遭疑獣娃, 婚 仙持 獣娃, 徹 喚鍵 判呪
+  FACTORY_CS_AUTO_LAYER2_I       = 3, // 0x3-Slide(Folder) 鯵二 判呪, 賎希 端衣 判呪
+  FACTORY_CS_AUTO_LAYER3_I       = 4, // 0x4-朝五虞 姥疑 獣娃, LCD Backlight 繊去獣娃
+  FACTORY_CS_AUTO_MEMORY_I       = 5, // 0x5-五乞軒 紫遂 遂勲
+  FACTORY_CS_AUTO_CALL1_I        = 6, // 0x6-恥 搭鉢 獣娃/闇呪, 慎雌 搭鉢 獣娃
+  FACTORY_CS_AUTO_CALL2_I        = 7, // 0x7-SMS 呪/降重 闇呪, WAP 羨紗 闇呪
+  FACTORY_CS_AUTO_CALL3_I        = 8, // 0x8-巷識昔斗掛 獣娃, NO SVC/Call Drop 降持 判呪
+  FACTORY_CS_AUTO_RESET_I        = 9, // 0x9-s/w reset, 穿据 ON/OFF 判呪, h/w reset
+  FACTORY_CS_AUTO_ERRLOG_I       = 10, // 0xA-拭君 稽益
+  FACTORY_CS_AUTO_CALL4_I        = 11, // 0xB-Call drop 貢 降重 叔鳶
+  FACTORY_CS_AUTO_CALL5_I        = 12, // 0xC-降重 貢 鐸重 失因
+  FACTORY_MSECTOR_WRITE_I        = 20, // 0x14-MSector Write Flag
+  FACTORY_MSECTOR_READ_I         = 21, // 0x15-MSector Read Flag
+  FACTORY_CHECK_CAL_FLAG_I       = 30, // 0x1E-Cal 刃戟食採 溌昔
+  FACTORY_FIRMWARE_VER_I         = 39, // 0x27-FIRMWARE 獄穿 溌昔
+  FACTORY_M3A_NAND_VER_I         = 40, // 0x28-2nd NAND/TCC Version 獄穿 溌昔
+  FACTORY_FINAL_I                = 48, // 0x30-窒馬竺舛淫恵 段奄鉢
+  FACTORY_FINAL_CHECK_I          = 49, // 0x31-窒馬竺舛淫恵 溌昔
+  FACTORY_INIT_ALL_I             = 55, // 0x37-穿端 段奄鉢.
+  FACTORY_INIT_RESET_I           = 56, // 0x38-段奄鉢 刃戟 板 H/W 軒実
+  FACTORY_INIT_SYS_CHECK_I       = 58, // 0x3A-獣什奴段奄鉢 溌昔
+  FACTORY_RSSIBAR_READ_I         = 60, // 0x3C-RSSI BAR Read
+  FACTORY_OPENING_DAY_READ_I     = 64, // 0x40-Opening Day Read
+  FACTORY_BD_ADDR_RD_I           = 90, // 0x5A-Bluetooth Device Address Read
+  FACTORY_BD_ADDR_WR_I           = 91, // 0x5B-Bluetooth Device Address Write
+  FACTORY_BT_TEST_SET_I          = 92, // 0x5C-Bluetooth 乞球 竺舛
+  FACTORY_BT_TEST_RELEASE_I      = 93, // 0x5D-Bluetooth 乞球 背薦
+  FACTORY_BT_TEST_CHECK_I        = 94, // 0x5E-Bluetooth 乞球 溌昔
+  FACTORY_WIFI_MODESET_I         = 96, // 0x60-RX/TX DUT Mode竺舛
+  FACTORY_WIFI_TXCTRL_I          = 97, // 0x61-TX Mode 竺舛 板 TX Power 薦嬢(ON/OFF)
+  FACTORY_WIFI_RXRPT_I           = 98, // 0x62-RX Mode 竺舛 板 BER 著舛
+  FACTORY_WIFI_RELEASE_I         = 99, // 0x63-Test 刃戟 板 Test Mode 背薦
+  FACTORY_BOOT_CHECK_I           = 100, // 0x64-採特戚 刃戟鞠嬢辞 TEST亜管 乞球昔走 溌昔
+  FACTORY_KEY_PRESS_I            = 110, // 0x6E-Command研 戚遂馬食 徹研 疑拙獣鉄
+  FACTORY_LCD_I                  = 115, // 0x73-LCD研 On/Off
+  FACTORY_SPEAKER_I              = 120, // 0x78-Speaker研 戚遂背 製据聖 窒径
+  FACTORY_IRDA_I                 = 125, // 0x7D-IRDA Port稽 汽戚斗 勺呪重 Test
+  FACTORY_BATTERY_BAR_I          = 135, // 0x87-Battery bar 鯵呪研 硝焼蛙
+  FACTORY_BATTERY_ADC_I          = 136, // 0x88-Battery ADC Value
+  FACTORY_CUTOFF_SWITCH_I        = 137, // 0x89-Battery Cutoff ADC 端滴 搾醗失鉢
+  FACTORY_SLEEP_MODE_I           = 140, // 0x8C-Sleep Mode Enable/Disable
+  FACTORY_TEMP_I                 = 145, // 0x91-紳亀 葵 Read
+  FACTORY_GPS_APP_MAP_CHECK_I    = 154, // 0x9A-GPS App, Map 雌殿 溌昔
+  FACTORY_CONTENTS_CHECK_I       = 155, // 0x9B-Contents 戚雌 政巷 溌昔
+  FACTORY_AGPS_TEST_SET_I        = 156, // 0x9C A-GPS C/No Test 乞球 竺舛
+  FACTORY_AGPS_TEST_CHECK_I      = 157, // 0x9D A-GPS C/No Test 乞球 溌昔
+  FACTORY_AGPS_MEASURE_I         = 158, // 0x9E A-GPS C/No著舛葵 溌昔
+  FACTORY_AGPS_TEST_RELEASE_I    = 159, // 0x9F C/No Test 乞球 背薦 
+  FACTORY_CHECKSUM_READ_I        = 160, // 0xA0-SECTION 紺 CHECKSUM 域至
+  FACTORY_USIM_MODE_SET_I        = 176, // 0xB0-USIM Mode竺舛
+  FACTORY_USIM_MODE_CHECK_I      = 177, // 0xB1-USIM Mode 溌昔
+  FACTORY_USIM_CARD_CHECK_I      = 178, // 0xB2-USIM Card 溌昔
+  FACTORY_USIM_PERSO_CONTROL_I   = 179, // 0xB3_ME Personalization聖 薦嬢
+  FACTORY_SDCARD_CHECK_I         = 180, // 0xB4-SD Card 諮脊政巷 貢 遂勲 溌昔
+  FACTORY_DUAL_USIM_CARD_CHECK_I = 181, // 0xB5-Dual USIM Card 溌昔
+  FACTORY_BAUDRATE_CHANGE_I      = 200, // 0xC8-Baudrate change
+  FACTORY_VOLUME_MAX_I           = 201, // 0xC9-Voice Call 製勲 置企稽 竺舛
+  FACTORY_SERIAL_NUMBER_I        = 202, // 0xCA-析沙狽 乞季 薦繕腰硲 Read/Write Command
+  FACTORY_MODEL_NAME_I           = 203, // 0xCB-乞季誤 Read Command
+  FACTORY_PMIC_INIT_I            = 204, // 0xCC-PMIC 段奄鉢 誤敬.
+  FACTORY_PIN_CODE_READ_I        = 210, // 0xD2-析沙狽 PIN Code Read 誤敬
+  FACTORY_WCDMA_MIN_READ_I       = 211, // 0xD3-鎧呪狽 WCDMA乞季 穿鉢腰硲研 石嬢神澗 誤敬
+  FACTORY_MOVIENAND_FORMAT_I     = 215, // 0xD7 MovieNAND Memory Format Command
+  FACTORY_SHORTCUT_DIAL_I        = 216, // 0xD8 Auto Call 因舛拭辞 舘源奄 -> 域著奄稽 悪薦稽 舘逐 Call(911暁澗・) 杏奄 是廃 Command
+  FACTORY_IMEI_RD_I              = 220, // Dual USIM税 井酔First IMEI Read Command
+  FACTORY_IMEI_WR_I              = 221, // Dual USIM税 井酔First IMEI Write Command
+  FACTORY_IMEI_2_RD_I            = 222, // Dual USIM税 井酔Second IMEI Read Command
+  FACTORY_IMEI_2_WR_I            = 223, // Dual USIM税 井酔Second IMEI Write Command
+  FACTORY_WIFI_MAC_RD_I          = 224, // WiFi Mac Read Command
+  FACTORY_WIFI_MAC_WR_I          = 225, // WiFi Mac Write Command
+  FACTORY_HDET_AUTO_CAL_I        = 226, // MSM, MDM HDET Auto Cal聖 肉 鎧採旋生稽 呪楳
+  FACTORY_RF_PATH_INIT_I         = 227, // RF Switch 段奄鉢. 戚暗 照馬檎 MDM Rx Div 繕舛 照喫
+  FACTORY_ANDROID_SHUTDOWN_I     = 230, // File System 疑奄鉢研 是廃 Command
+  FACTORY_PATTERN_UNLOCK_I       = 231, // PATTERN 節榎 竺舛 背薦
+  FACTORY_WIFI_AP_INFO_I         = 232, // Scan吉 AP税 SSID 貢 RSSI Level 溌昔
+  FACTORY_WIFI_CONNECT_I         = 233, // SSID研 戚遂馬食 背雁 AP拭 尻衣馬奄
+  FACTORY_RX_AGC_VERIFY_I        = 234, // RX AGC 溌昔 Command
+  FACTORY_SENSOR_CHECK_I         = 235, // 旋遂吉 Sensor税 昔縦 食採研 溌昔馬食 衣引葵 Return
+  FACTORY_DO_NV_BACKUP_I         = 236, // NV研 拷穣 慎蝕拭 差紫
+  FACTORY_SET_CAL_FLAG_I         = 237, // 繕舛 刃戟 Flag 竺舛 ? Set / Reset
+  FACTORY_GET_OPER_MODE_I        = 238,
+  FACTORY_MONITORING_ONOFF_I     = 240, // 0xF0-析沙狽 Usb貢 serial diag搭重獣 肉鎧採旋生稽 乞艦斗元 汽戚斗亜 降持馬澗杏 号走馬澗 誤敬
+  FACTORY_FUNCTION_FLAG_I        = 242, // FUNCTION TEST板 衣引亜 PASS/FAIL昔 牌鯉拭 企背 TEST 刃戟板 益 衣引研 FLAG稽 煽舌
+  FACTORY_GS_COMPENSATION_I      = 243, // GlideSensor Compensation Command
+  FACTORY_SYSTEM_PARAMETER_I     = 244, // System Parameter 溌昔 Command
+  FACTORY_MICP_CONTROL_I         = 245, // 1st, 2nd MIC Path Control(Enable/Disable)
+  FACTORY_ICC_ID_I               = 246, // 杉球肉 Simcard Serial Number ID Read Command
+  FACTORY_PREF_MODE_I            = 247, // prefer mode 竺舛 Command
+  FACTORY_BOOT_MODE_I            = 248, // Boot Mode Setting
+  FACTORY_BOOT_MODE_CHECK_I      = 249, // Current Boot Mode Check
+  FACTORY_TWND_RD_I              = 250, // Touch Window Cal Value Read Command
+  FACTORY_TWND_WR_I              = 251, // Touch Window Cal Value Write Command
+  FACTORY_TEMPMIN_RD_I           = 252, // 析沙狽 乞季 TempMIN Read Command
+  FACTORY_TEMPMIN_WR_I           = 253, // 析沙狽 乞季 TempMIN Write Command
+  FACTORY_DMP_CHANGE_I           = 254, // DM Port 痕井 Command
+  FACTORY_CAMERA_SN_READ_I       = 255 	// CAMERA SN Read
+};
+enum
+{
+  FACTORY_MSECTOR_SETID_I,       // 00 - 0x00
+  FACTORY_MSECTOR_PCBA_I,        // 01 - 0x01
+  FACTORY_MSECTOR_ASSY_I,        // 02 - 0x02
+  FACTORY_MSECTOR_TEST_I,        // 03 - 0x03
+  FACTORY_MSECTOR_BSN_I,         // 04 - 0x04
+  FACTORY_MSECTOR_MINPOWER_I,    // 05 - 0x05
+  FACTORY_MSECTOR_MAXPOWER_I,    // 06 - 0x06
+  FACTORY_MSECTOR_COMP1_I,       // 07 - 0x07
+  FACTORY_MSECTOR_COMP2_I,       // 08 - 0x08
+  FACTORY_MSECTOR_COMP3_I,       // 09 - 0x09
+  FACTORY_MSECTOR_REPAIR1_I,     // 10 - 0x0A
+  FACTORY_MSECTOR_REPAIR2_I,     // 11 - 0x0B
+  FACTORY_MSECTOR_REPAIR3_I,     // 12 - 0x0C
+  FACTORY_MSECTOR_AS1_I,         // 13 - 0x0D
+  FACTORY_MSECTOR_AS2_I,         // 14 - 0x0E
+  FACTORY_MSECTOR_AS3_I,         // 15 - 0x0F
+  FACTORY_MSECTOR_MODEL_I,       // 16 - 0x10
+  FACTORY_MSECTOR_PROCESS_FLAG_I,// 17 - 0x11
+};
+static int skyfwddiagcmd[] =
+{
+	FACTORY_MSECTOR_WRITE_I,
+	FACTORY_MSECTOR_READ_I,
+	FACTORY_CHECKSUM_READ_I,
+	FACTORY_CUTOFF_SWITCH_I,
+	FACTORY_SLEEP_MODE_I,
+	FACTORY_TEMP_I,
+	FACTORY_AGPS_TEST_SET_I,
+	FACTORY_AGPS_TEST_CHECK_I,
+	FACTORY_AGPS_MEASURE_I,
+	FACTORY_AGPS_TEST_RELEASE_I,
+	//FACTORY_USIM_CARD_CHECK_I,
+#ifndef FEATURE_LGU_CP_PROCESS_CMD_WITH_RPC
+  //FACTORY_SYSTEM_PARAMETER_I,
+#endif
+ 	FACTORY_TWND_RD_I,
+	FACTORY_TWND_WR_I,
+#ifndef FEATURE_LGU_CP_PROCESS_CMD_WITH_RPC
+	//FACTORY_FINAL_I,
+	//FACTORY_FINAL_CHECK_I,
+	//FACTORY_OPENING_DAY_READ_I,
+	//FACTORY_USIM_MODE_SET_I,
+	//FACTORY_USIM_MODE_CHECK_I,
+	//FACTORY_WCDMA_MIN_READ_I,
+	//FACTORY_USIM_PERSO_CONTROL_I,
+#endif
+	FACTORY_RSSIBAR_READ_I,
+#ifndef FEATURE_LGU_CP_PROCESS_CMD_WITH_RPC
+	//FACTORY_CS_AUTO_CALL3_I,
+	//FACTORY_PREF_MODE_I,
+  //FACTORY_SHORTCUT_DIAL_I,	
+#endif
+	FACTORY_ANDROID_SHUTDOWN_I,
+	FACTORY_PATTERN_UNLOCK_I, //ds2 team shs
+	FACTORY_RF_PATH_INIT_I,
+	FACTORY_HDET_AUTO_CAL_I,
+	FACTORY_RX_AGC_VERIFY_I,
+	FACTORY_DO_NV_BACKUP_I,
+	FACTORY_SET_CAL_FLAG_I,
+	FACTORY_GET_OPER_MODE_I,
+	0x00
+};
+#endif
 static int diag_process_apps_pkt(unsigned char *buf, int len)
 {
 	uint16_t subsys_cmd_code;
@@ -1173,18 +1348,34 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 #endif
 	}
 	/* Check for registered clients and forward packet to apropriate proc */
+	else{
 	cmd_code = (int)(*(char *)buf);
 	temp++;
 	subsys_id = (int)(*(char *)temp);
 	temp++;
 	subsys_cmd_code = *(uint16_t *)temp;
 	temp += 2;
+
 	data_type = APPS_DATA;
 	/* Dont send any command other than mode reset */
 	if (chk_apps_master() && cmd_code == MODE_CMD) {
 		if (subsys_id != RESET_ID)
 			data_type = MODEM_DATA;
 	}
+
+//#ifdef CONFIG_PANTECH_SKY
+#if 1  //im.seho nv_backup 20111003
+		i=0;
+		if(cmd_code == 0xFA) { /* bug_fix: DIAG_FACTORY_REQ_F */
+			while(skyfwddiagcmd[i] != 0)
+			{	
+				if(subsys_id == skyfwddiagcmd[i++])
+				{
+					return packet_type;;
+				}
+			}
+		}
+#endif
 
 	pr_debug("diag: %d %d %d", cmd_code, subsys_id, subsys_cmd_code);
 	for (i = 0; i < diag_max_reg; i++) {
@@ -1220,6 +1411,7 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 				}
 			}
 		}
+	}
 	}
 #if defined(CONFIG_DIAG_OVER_USB)
 	/* Check for the command/respond msg for the maximum packet length */
@@ -1607,7 +1799,11 @@ int diagfwd_connect(void)
 	/* Poll USB channel to check for data*/
 	queue_work(driver->diag_wq, &(driver->diag_read_work));
 #ifdef CONFIG_DIAG_SDIO_PIPE
-	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()) {
+	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+		|| machine_is_msm8x60_ef65l()
+#endif
+	) {
 		if (driver->mdm_ch && !IS_ERR(driver->mdm_ch))
 			diagfwd_connect_sdio();
 		else
@@ -1632,7 +1828,11 @@ int diagfwd_disconnect(void)
 		driver->in_busy_wcnss_2 = 1;
 	}
 #ifdef CONFIG_DIAG_SDIO_PIPE
-	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())
+	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+	|| machine_is_msm8x60_ef65l()
+#endif
+	)
 		if (driver->mdm_ch && !IS_ERR(driver->mdm_ch))
 			diagfwd_disconnect_sdio();
 #endif
@@ -1675,7 +1875,11 @@ int diagfwd_write_complete(struct diag_request *diag_write_ptr)
 #ifdef CONFIG_DIAG_SDIO_PIPE
 	else if (buf == (void *)driver->buf_in_sdio)
 		if (machine_is_msm8x60_fusion() ||
-			 machine_is_msm8x60_fusn_ffa())
+			 machine_is_msm8x60_fusn_ffa()
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+			|| machine_is_msm8x60_ef65l()
+#endif
+		 )
 			diagfwd_write_complete_sdio();
 		else
 			pr_err("diag: Incorrect buffer pointer while WRITE");
@@ -1717,7 +1921,11 @@ int diagfwd_read_complete(struct diag_request *diag_read_ptr)
 #ifdef CONFIG_DIAG_SDIO_PIPE
 	else if (buf == (void *)driver->usb_buf_mdm_out) {
 		if (machine_is_msm8x60_fusion() ||
-				 machine_is_msm8x60_fusn_ffa()) {
+				 machine_is_msm8x60_fusn_ffa()
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+					|| machine_is_msm8x60_ef65l()
+#endif
+				 ) {
 			driver->read_len_mdm = diag_read_ptr->actual;
 			diagfwd_read_complete_sdio();
 		} else

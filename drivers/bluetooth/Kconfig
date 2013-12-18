@@ -274,5 +274,16 @@ config BRCM_BT_HID
 	  Bluetooth broadcom hid driver.
 	  This driver provides support for hid profile.
 
+config SKY_BT
+	tristate "SKY BLUETOOTH CONFIG"
+	depends on BT
+	help
+	  Bluetooth SKY
+
+config PANTECH_BT
+	tristate "PANTECH BLUETOOTH CONFIG"
+	depends on BT
+	help
+	  Bluetooth PANTECH
 
 endmenu

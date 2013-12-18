@@ -325,7 +325,11 @@ void msm_restart(char mode, const char *cmd)
         __raw_writel(NORMAL_RESET_MAGIC_NUM, restart_reason+4);
 #endif /* CONFIG_PANTECH_WDOG_WORKAROUND */
 	__raw_writel(0, msm_tmr0_base + WDT0_EN);
-	if (!(machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())) {
+	if (!(machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+	      || machine_is_msm8x60_ef65l()
+#endif
+	      )) {	
 		mb();
 		__raw_writel(0, PSHOLD_CTL_SU); /* Actually reset the chip */
 		mdelay(5000);

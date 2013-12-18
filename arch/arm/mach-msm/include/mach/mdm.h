@@ -21,7 +21,11 @@ struct charm_platform_data {
 
 #define AP2MDM_STATUS   136
 #define MDM2AP_STATUS   134
+#if defined(CONFIG_SKY_EF65L_BOARD)
+#define MDM2AP_WAKEUP   45
+#else
 #define MDM2AP_WAKEUP   40
+#endif
 #define MDM2AP_ERRFATAL 133
 #define AP2MDM_ERRFATAL 93
 
