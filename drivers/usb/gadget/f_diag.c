@@ -35,8 +35,31 @@ static struct usb_interface_descriptor intf_desc = {
 	.bDescriptorType    =	USB_DT_INTERFACE,
 	.bNumEndpoints      =	2,
 	.bInterfaceClass    =	0xFF,
+#if 1//pdj666 mdm_diag
+	.bInterfaceSubClass =	0xE0,
+	.bInterfaceProtocol =	0x10,
+#else
 	.bInterfaceSubClass =	0xFF,
 	.bInterfaceProtocol =	0xFF,
+#endif	
+};
+// pdj666 mdm_diag
+static struct usb_interface_descriptor intf_msm_desc = {
+	.bLength            =	sizeof intf_msm_desc,
+	.bDescriptorType    =	USB_DT_INTERFACE,
+	.bNumEndpoints      =	2,
+	.bInterfaceClass    =	0xFF,
+	.bInterfaceSubClass =	0xE0,
+	.bInterfaceProtocol =	0x20,
+};
+
+static struct usb_interface_descriptor intf_mdm_desc = {
+	.bLength            =	sizeof intf_mdm_desc,
+	.bDescriptorType    =	USB_DT_INTERFACE,
+	.bNumEndpoints      =	2,
+	.bInterfaceClass    =	0xFF,
+	.bInterfaceSubClass =	0xE0,
+	.bInterfaceProtocol =	0x30,
 };
 
 static struct usb_endpoint_descriptor hs_bulk_in_desc = {
@@ -73,19 +96,47 @@ static struct usb_endpoint_descriptor fs_bulk_out_desc = {
 	.wMaxPacketSize   = __constant_cpu_to_le16(64),
 	.bInterval        =	0,
 };
-
+// pdj666 mdm_diag >>>
+static struct usb_descriptor_header *fs_msm_diag_desc[] = {
+	(struct usb_descriptor_header *) &intf_msm_desc,
+	(struct usb_descriptor_header *) &fs_bulk_in_desc,
+	(struct usb_descriptor_header *) &fs_bulk_out_desc,
+	NULL,
+	};
+static struct usb_descriptor_header *fs_mdm_diag_desc[] = {
+	(struct usb_descriptor_header *) &intf_mdm_desc,
+	(struct usb_descriptor_header *) &fs_bulk_in_desc,
+	(struct usb_descriptor_header *) &fs_bulk_out_desc,
+	NULL,
+	};
+#if 0 // pz1945
 static struct usb_descriptor_header *fs_diag_desc[] = {
 	(struct usb_descriptor_header *) &intf_desc,
 	(struct usb_descriptor_header *) &fs_bulk_in_desc,
 	(struct usb_descriptor_header *) &fs_bulk_out_desc,
 	NULL,
 	};
+#endif
+static struct usb_descriptor_header *hs_msm_diag_desc[] = {
+	(struct usb_descriptor_header *) &intf_msm_desc,
+	(struct usb_descriptor_header *) &hs_bulk_in_desc,
+	(struct usb_descriptor_header *) &hs_bulk_out_desc,
+	NULL,
+};
+static struct usb_descriptor_header *hs_mdm_diag_desc[] = {
+	(struct usb_descriptor_header *) &intf_mdm_desc,
+	(struct usb_descriptor_header *) &hs_bulk_in_desc,
+	(struct usb_descriptor_header *) &hs_bulk_out_desc,
+	NULL,
+};
+#if 0 // pz1945
 static struct usb_descriptor_header *hs_diag_desc[] = {
 	(struct usb_descriptor_header *) &intf_desc,
 	(struct usb_descriptor_header *) &hs_bulk_in_desc,
 	(struct usb_descriptor_header *) &hs_bulk_out_desc,
 	NULL,
 };
+#endif
 
 /**
  * struct diag_context - USB diag function driver private structure
@@ -339,6 +390,7 @@ int usb_diag_alloc_req(struct usb_diag_ch *ch, int n_write, int n_read)
 	struct usb_request *req;
 	int i;
 
+	printk("%s \n",__func__);
 	if (!ctxt)
 		return -ENODEV;
 
@@ -389,6 +441,7 @@ int usb_diag_read(struct usb_diag_ch *ch, struct diag_request *d_req)
 	if (!ctxt)
 		return -ENODEV;
 
+	printk("%s \n",__func__);
 	spin_lock_irqsave(&ctxt->lock, flags);
 
 	if (!ctxt->configured) {
@@ -444,6 +497,7 @@ int usb_diag_write(struct usb_diag_ch *ch, struct diag_request *d_req)
 
 	if (!ctxt)
 		return -ENODEV;
+	printk("%s \n",__func__);
 
 	spin_lock_irqsave(&ctxt->lock, flags);
 
@@ -488,6 +542,7 @@ static void diag_function_disable(struct usb_function *f)
 	unsigned long flags;
 
 	DBG(dev->cdev, "diag_function_disable\n");
+	printk("%s \n",__func__);
 
 	spin_lock_irqsave(&dev->lock, flags);
 	dev->configured = 0;
@@ -543,7 +598,11 @@ static int diag_function_set_alt(struct usb_function *f,
 	spin_lock_irqsave(&dev->lock, flags);
 	dev->configured = 1;
 	spin_unlock_irqrestore(&dev->lock, flags);
+	printk("E  %s \n",__func__);
 
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+	usb_interface_enum_cb(DIAG_TYPE_FLAG);
+#endif
 	return rc;
 }
 
@@ -552,6 +611,7 @@ static void diag_function_unbind(struct usb_configuration *c,
 {
 	struct diag_context *ctxt = func_to_diag(f);
 
+	printk("%s \n",__func__);
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);
 
@@ -567,8 +627,33 @@ static int diag_function_bind(struct usb_configuration *c,
 	struct usb_ep *ep;
 	int status = -ENODEV;
 
+#if 0//pdj666 mdm_diag defined(CONFIG_ANDROID_PANTECH_USB)
+	if(!b_qualcomm_usb_mode && b_pantech_usb_module){
+		intf_desc.bInterfaceSubClass = 0xE0;
+#ifdef CONFIG_PANTECH_ATNT
+		intf_desc.bInterfaceProtocol = 0x20;
+#else
+		intf_desc.bInterfaceProtocol = 0x10;
+#endif		
+	}else{
+		intf_desc.bInterfaceSubClass = 0xFF;
+	  intf_desc.bInterfaceProtocol = 0xFF;
+	}
+#endif
+#if 1//pdj666_mdm_diag
+	if (!strcmp("diag", f->name)){
+		printk("alloc an unused interface ID  diag \n");
+// allocate an unused interface ID
+		intf_msm_desc.bInterfaceNumber =  usb_interface_id(c, f);
+	}else if(!strcmp("diag_mdm", f->name)){
+		printk(" alloc an unused interface ID  diag_mdm \n");
+// allocate an unused interface ID
+		intf_mdm_desc.bInterfaceNumber =  usb_interface_id(c, f);
+	}
+	printk("%s bInterfaceNumber= %x \n",__func__, intf_desc.bInterfaceNumber);
+#else
 	intf_desc.bInterfaceNumber =  usb_interface_id(c, f);
-
+#endif
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_bulk_in_desc);
 	if (!ep)
 		goto fail;
@@ -582,7 +667,17 @@ static int diag_function_bind(struct usb_configuration *c,
 	ep->driver_data = ctxt;
 
 	/* copy descriptors, and track endpoint copies */
+#if 1//pdj666_mdm_diag
+		if (!strcmp("diag", f->name)){
+			printk(" bind diag \n");
+			f->descriptors = usb_copy_descriptors(fs_msm_diag_desc);	
+		}else if(!strcmp("diag_mdm", f->name)){
+			printk(" bind diag_mdm \n");
+	        	f->descriptors = usb_copy_descriptors(fs_mdm_diag_desc);
+		}
+#else		
 	f->descriptors = usb_copy_descriptors(fs_diag_desc);
+#endif
 	if (!f->descriptors)
 		goto fail;
 
@@ -593,7 +688,17 @@ static int diag_function_bind(struct usb_configuration *c,
 				fs_bulk_out_desc.bEndpointAddress;
 
 		/* copy descriptors, and track endpoint copies */
+#if 1//pdj666_mdm_diag
+		if (!strcmp("diag", f->name)){
+			printk(" bind diag \n");
+			f->hs_descriptors = usb_copy_descriptors(hs_msm_diag_desc);	
+		}else if(!strcmp("diag_mdm", f->name)){
+			printk(" bind diag_mdm \n");
+             		f->hs_descriptors = usb_copy_descriptors(hs_mdm_diag_desc);
+		}
+#else
 		f->hs_descriptors = usb_copy_descriptors(hs_diag_desc);
+#endif
 	}
 	return 0;
 fail:
@@ -613,6 +718,7 @@ int diag_function_add(struct usb_configuration *c, const char *name,
 	int found = 0, ret;
 
 	DBG(c->cdev, "diag_function_add\n");
+	printk("%s \n",__func__);
 
 	list_for_each_entry(_ch, &usb_diag_ch_list, list) {
 		if (!strcmp(name, _ch->name)) {
@@ -632,8 +738,25 @@ int diag_function_add(struct usb_configuration *c, const char *name,
 	dev->update_pid_and_serial_num = update_pid;
 	dev->cdev = c->cdev;
 	dev->function.name = _ch->name;
+#if 1//pdj666_mdm_diag
+	if (!strcmp("diag", _ch->name)){
+		dev->function.descriptors = fs_msm_diag_desc;
+	}else if(!strcmp("diag_mdm", _ch->name)){
+		dev->function.descriptors = fs_mdm_diag_desc;
+	}
+	
+	if (!strcmp("diag", _ch->name)){
+		printk(" ^^^^^^ diag \n");
+		dev->function.hs_descriptors = hs_msm_diag_desc;	
+	}else if(!strcmp("diag_mdm", _ch->name)){
+		printk(" ^^^^^^ diag_mdm \n");
+		dev->function.hs_descriptors = hs_mdm_diag_desc;
+	}
+		
+#else		
 	dev->function.descriptors = fs_diag_desc;
 	dev->function.hs_descriptors = hs_diag_desc;
+#endif
 	dev->function.bind = diag_function_bind;
 	dev->function.unbind = diag_function_unbind;
 	dev->function.set_alt = diag_function_set_alt;
@@ -662,6 +785,7 @@ static ssize_t debug_read_stats(struct file *file, char __user *ubuf,
 	char *buf = debug_buffer;
 	int temp = 0;
 	struct usb_diag_ch *ch;
+	printk("%s \n",__func__);
 
 	list_for_each_entry(ch, &usb_diag_ch_list, list) {
 		struct diag_context *ctxt = ch->priv_usb;
@@ -688,6 +812,7 @@ static ssize_t debug_reset_stats(struct file *file, const char __user *buf,
 {
 	struct usb_diag_ch *ch;
 
+	printk("%s \n",__func__);
 	list_for_each_entry(ch, &usb_diag_ch_list, list) {
 		struct diag_context *ctxt = ch->priv_usb;
 
@@ -715,6 +840,7 @@ static const struct file_operations debug_fdiag_ops = {
 struct dentry *dent_diag;
 static void fdiag_debugfs_init(void)
 {
+	printk("%s \n",__func__);
 	dent_diag = debugfs_create_dir("usb_diag", 0);
 	if (IS_ERR(dent_diag))
 		return;
@@ -734,6 +860,7 @@ static void diag_cleanup(void)
 	struct list_head *act, *tmp;
 	struct usb_diag_ch *_ch;
 	unsigned long flags;
+	printk("%s \n",__func__);
 
 	debugfs_remove_recursive(dent_diag);
 
@@ -754,6 +881,7 @@ static void diag_cleanup(void)
 static int diag_setup(void)
 {
 	fdiag_debugfs_init();
+	printk("%s \n",__func__);
 
 	return 0;
 }

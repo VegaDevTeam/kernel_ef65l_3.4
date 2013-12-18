@@ -67,7 +67,9 @@
 #include <linux/usb/msm_hsusb.h>
 
 #include "ci13xxx_udc.h"
-
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+#include "f_pantech_android.h"
+#endif
 
 /******************************************************************************
  * DEFINE
@@ -2955,6 +2957,10 @@ static const struct usb_ep_ops usb_ep_ops = {
 	.fifo_flush    = ep_fifo_flush,
 };
 
+#ifdef CONFIG_ANDROID_PANTECH_USB_FACTORY_CABLE
+extern int set_factory_mode(bool onoff);
+#endif
+
 /******************************************************************************
  * GADGET block
  *****************************************************************************/
@@ -2986,6 +2992,9 @@ static int ci13xxx_vbus_session(struct usb_gadget *_gadget, int is_active)
 				udc->udc_driver->notify_event(udc,
 					CI13XXX_CONTROLLER_DISCONNECT_EVENT);
 			pm_runtime_put_sync(&_gadget->dev);
+#ifdef CONFIG_ANDROID_PANTECH_USB_FACTORY_CABLE
+		  set_factory_mode(false);
+#endif
 		}
 	}
 

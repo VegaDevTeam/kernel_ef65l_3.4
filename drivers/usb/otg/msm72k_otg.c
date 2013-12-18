@@ -35,6 +35,7 @@
 #define MSM_USB_BASE	(dev->regs)
 #define USB_LINK_RESET_TIMEOUT	(msecs_to_jiffies(10))
 #define DRIVER_NAME	"msm_otg"
+#define FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
 static void otg_reset(struct usb_phy *phy, int phy_reset);
 static void msm_otg_set_vbus_state(int online);
 #ifdef CONFIG_USB_EHCI_MSM_72K
@@ -46,6 +47,15 @@ static void msm_otg_set_id_state(int id)
 #endif
 
 struct msm_otg *the_msm_otg;
+#ifdef FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
+enum chg_type pantech_get_otg_chg_type(void)
+{	
+	struct msm_otg *dev = the_msm_otg;
+	if(dev)		
+		return atomic_read(&dev->chg_type);
+
+	return USB_CHG_TYPE__INVALID;}
+#endif/*FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG*/
 
 static int is_host(void)
 {

@@ -281,6 +281,14 @@ static enum usb_device_state msm_hsusb_get_state(void)
 	return state;
 }
 
+// choi -->
+int get_udc_state(void)
+{
+	return the_usb_info->sdev.state;
+}
+EXPORT_SYMBOL(get_udc_state);
+// choi --<
+
 static ssize_t print_switch_name(struct switch_dev *sdev, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%s\n", DRIVER_NAME);
@@ -1372,9 +1380,11 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 			/* XXX: we can't seem to detect going offline,
 			 * XXX:  so deconfigure on reset for the time being
 			 */
-			dev_dbg(&ui->pdev->dev,
+			if (ui->driver) {
+				dev_dbg(&ui->pdev->dev,
 					"usb: notify offline\n");
-			ui->driver->disconnect(&ui->gadget);
+				ui->driver->disconnect(&ui->gadget);
+			}
 			/* cancel pending ep0 transactions */
 			flush_endpoint(&ui->ep0out);
 			flush_endpoint(&ui->ep0in);
@@ -2617,7 +2627,11 @@ static ssize_t show_usb_chg_type(struct device *dev,
 	return count;
 }
 static DEVICE_ATTR(wakeup, S_IWUSR, 0, usb_remote_wakeup);
+#if defined(CONFIG_ANDROID_PANTECH_USB)
+static DEVICE_ATTR(usb_state, S_IRUSR | S_IRGRP | S_IROTH, show_usb_state, 0);
+#else
 static DEVICE_ATTR(usb_state, S_IRUSR, show_usb_state, 0);
+#endif
 static DEVICE_ATTR(usb_speed, S_IRUSR, show_usb_speed, 0);
 static DEVICE_ATTR(chg_type, S_IRUSR, show_usb_chg_type, 0);
 static DEVICE_ATTR(chg_current, S_IWUSR | S_IRUSR,
