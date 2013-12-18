@@ -2982,13 +2982,7 @@ void force_mdp_on(void)
 	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 
     if (!mfd->panel_power_on) {
-        //mdp_on(mfd->pdev);
-#if defined CONFIG_MACH_MSM8X60_PRESTO     
-        mdp_lcdc_on(mfd->pdev);
-#else
         mdp4_dsi_video_on(mfd->pdev);
-#endif
-        //mdp4_dsi_video_overlay(mfd);
         if ((pdata) && (pdata->set_backlight)) {
             mfd->bl_level = mfd->panel_info.bl_max;
             pdata->set_backlight(mfd);

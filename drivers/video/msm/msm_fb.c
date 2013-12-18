@@ -49,6 +49,14 @@
 #include "mdp.h"
 #include "mdp4.h"
 
+#ifdef CONFIG_FB_MSM_LOGO
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+int offline_charging_status = 0;
+extern int sky_charging_status(void);
+extern void gpio_set_132_trickle_leakeage(void);
+#endif
+#endif
+
 #ifdef CONFIG_SW_RESET
 #include "../../../arch/arm/mach-msm/sky_sys_reset.h"
 #endif
@@ -116,6 +124,10 @@ static int msm_fb_mmap(struct fb_info *info, struct vm_area_struct * vma);
 static int mdp_bl_scale_config(struct msm_fb_data_type *mfd,
 						struct mdp_bl_scale_data *data);
 static void msm_fb_scale_bl(__u32 *bl_lvl);
+
+#if defined(CONFIG_F_SKYDISP_LCD_FORCE_ONOFF)
+static int msm_fb_blank_sub_force(int blank_mode, struct fb_info *info, int bl);
+#endif
 
 #ifdef MSM_FB_ENABLE_DBGFS
 
@@ -887,8 +899,12 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			ret = pdata->on(mfd->pdev);
 			if (ret == 0) {
 				mfd->panel_power_on = TRUE;
+
+#ifdef CONFIG_F_SKYDISP_QBUG_FIX_BACKLIGHT
+		msm_fb_set_backlight(mfd, mfd->bl_level);
+#endif
 #ifdef CONFIG_SW_RESET
-				msm_reset_set_bl(1);
+		msm_reset_set_bl(1);
 #endif
 
 /* ToDo: possible conflict with android which doesn't expect sw refresher */
@@ -919,6 +935,9 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			bl_updated = 0;
 
 			msleep(16);
+#ifdef CONFIG_F_SKYDISP_QBUG_FIX_BACKLIGHT
+			msm_fb_set_backlight(mfd, 0);
+#endif
 			ret = pdata->off(mfd->pdev);
 #ifdef CONFIG_SW_RESET
 			msm_reset_set_bl(0);
@@ -1334,8 +1353,8 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	var->grayscale = 0,	/* No graylevels */
 	var->nonstd = 0,	/* standard pixel format */
 	var->activate = FB_ACTIVATE_VBL,	/* activate it at vsync */
-	var->height = -1,	/* height of picture in mm */
-	var->width = -1,	/* width of picture in mm */
+	var->height = 101,	/* height of picture in mm */
+	var->width = 63,	/* width of picture in mm */
 	var->accel_flags = 0,	/* acceleration flags */
 	var->sync = 0,	/* see FB_SYNC_* */
 	var->rotate = 0,	/* angle we rotate counter clockwise */
@@ -1657,6 +1676,22 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	    ("FrameBuffer[%d] %dx%d size=%d bytes is registered successfully!\n",
 	     mfd->index, fbi->var.xres, fbi->var.yres, fbi->fix.smem_len);
 
+#ifdef CONFIG_PANTECH_DONOT_POWER_ON_HDMI_AT_FB_OPEN
+	if (mfd->index == 0)
+#endif
+	{
+#if defined(CONFIG_F_SKYDISP_BOOT_LOGO_IN_KERNEL) && defined(CONFIG_FB_MSM_LOGO)
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+		if (sky_charging_status()) {
+			gpio_set_132_trickle_leakeage();	//jwchoi_temp
+			ret = load_565rle_image(BATTERY_IMAGE_FILE, bf_supported);
+			offline_charging_status = 1;
+#if defined(CONFIG_MACH_MSM8X60_EF65L)
+			mfd->bl_level = 3;		//jwchoi_temp
+#endif
+		} else
+#endif
+
 #ifdef CONFIG_SW_RESET
 		if (msm_reset_reason()) {
 			if (msm_reset_get_bl() == 1)
@@ -1666,16 +1701,25 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 			}
 		} else
 #endif
+		ret = load_565rle_image(INIT_IMAGE_FILE, bf_supported);
 
 #ifdef CONFIG_SW_RESET
 		msm_reset_reason_clear();
 #endif
+
+		if (!ret) {
+			if (msm_fb_blank_sub(FB_BLANK_UNBLANK, fbi, true)) {
+				MSM_FB_ERR("[LIVED] msm_fb_register: can't turn on display!\n");
+			}
+		}
+#else
 #ifdef CONFIG_FB_MSM_LOGO
 	/* Flip buffer */
-	if (!load_565rle_image(INIT_IMAGE_FILE, bf_supported))
-		;
+	if (!load_565rle_image(INIT_IMAGE_FILE, bf_supported));
+#endif
 #endif
 	ret = 0;
+	}
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	if (hdmi_prim_display || mfd->panel_info.type != DTV_PANEL) {
@@ -1832,7 +1876,11 @@ static int msm_fb_open(struct fb_info *info, int user)
 			return 0;
 	}
 
+#ifdef CONFIG_PANTECH_DONOT_POWER_ON_HDMI_AT_FB_OPEN
+	if (!mfd->ref_cnt && mfd->index ==0) {
+#else
 	if (!mfd->ref_cnt) {
+#endif
 		if (!bf_supported ||
 			(info->node != 1 && info->node != 2))
 			mdp_set_dma_pan_info(info, NULL, TRUE);
@@ -1850,6 +1898,10 @@ static int msm_fb_open(struct fb_info *info, int user)
 	return 0;
 }
 
+#if defined(CONFIG_F_SKYDISP_BOOT_LOGO_IN_KERNEL) || defined(CONFIG_SKY_SMB136S_CHARGER)
+boolean no_release_first = TRUE;
+#endif
+
 static int msm_fb_release(struct fb_info *info, int user)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
@@ -1863,7 +1915,15 @@ static int msm_fb_release(struct fb_info *info, int user)
 
 	mfd->ref_cnt--;
 
-	if (!mfd->ref_cnt) {
+#if defined(CONFIG_F_SKYDISP_BOOT_LOGO_IN_KERNEL) || defined(CONFIG_SKY_SMB136S_CHARGER)
+	if (!mfd->ref_cnt && !no_release_first)
+#else
+	if (!mfd->ref_cnt)
+#endif
+	{
+#if defined(CONFIG_F_SKYDISP_BOOT_LOGO_IN_KERNEL) || defined(CONFIG_SKY_SMB136S_CHARGER)
+		no_release_first = FALSE;
+#endif
 		if ((ret =
 		     msm_fb_blank_sub(FB_BLANK_POWERDOWN, info,
 				      mfd->op_enable)) != 0) {

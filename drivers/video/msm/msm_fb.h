@@ -222,6 +222,13 @@ int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd,
 
 #ifdef CONFIG_FB_MSM_LOGO
 #define INIT_IMAGE_FILE "/initlogo.rle"
+#ifdef CONFIG_SW_RESET
+#define REBOOT_IMAGE_FILE "/reboot.rle"
+#endif
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#define BATTERY_IMAGE_FILE "/logo2.rle"
+#endif
+
 int load_565rle_image(char *filename, bool bf_supported);
 #endif
 

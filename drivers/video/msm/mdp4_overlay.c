@@ -40,6 +40,9 @@
 #include "mdp.h"
 #include "msm_fb.h"
 #include "mdp4.h"
+#ifdef CONFIG_F_SKYDISP_HDMI_BLOCK
+extern int check_hdmi_block(void);
+#endif
 
 #define VERSION_KEY_MASK	0xFFFFFF00
 
@@ -390,7 +393,9 @@ void mdp4_overlay_dmae_cfg(struct msm_fb_data_type *mfd, int atv)
 		MDP_OUTP(MDP_BASE + 0xb3014, 0x1000080);
 		MDP_OUTP(MDP_BASE + 0xb4004, 0x67686970);
 	} else {
+	#ifdef CONFIG_FB_MSM_HDMI_MHL  // 1044
 		mdp_vid_quant_set();
+	#endif	
 	}
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
@@ -609,7 +614,11 @@ static void mdp4_scale_setup(struct mdp4_overlay_pipe *pipe)
 
 		if (pipe->pipe_type == OVERLAY_TYPE_VIDEO) {
 			if (pipe->flags & MDP_BACKEND_COMPOSITION &&
+#ifdef CONFIG_F_SKYDISP_BUG_FIX_MDP_DOWNSCALING
+				pipe->dst_h > pipe->src_h)
+#else
 				pipe->alpha_enable && pipe->dst_h > pipe->src_h)
+#endif
 				pipe->op_mode |= MDP4_OP_SCALEY_PIXEL_RPT;
 			else if (pipe->dst_h <= (pipe->src_h / 4))
 				pipe->op_mode |= MDP4_OP_SCALEY_MN_PHASE;
@@ -2447,6 +2456,22 @@ static int mdp4_overlay_req2pipe(struct mdp_overlay *req, int mixer,
 	pipe->transp = req->transp_mask;
 
 	pipe->flags = req->flags;
+
+#ifdef CONFIG_ARCH_MSM8X60
+	/* If we're composing with MDP and we suddenly need a really outrageous clockrate,
+	 * just fail so that userspace switches to the GPU. If we don't do this, MDP will
+	 * switch to BLT mode, but it locks up and we never get any interrupts. Only seems to
+	 * happen on 8660 devices, so ifdeffed this appropriately. */
+	if (pipe->flags & MDP_BACKEND_COMPOSITION && req->id == MSMFB_NEW_REQUEST) {
+		mdp4_calc_pipe_mdp_clk(mfd, pipe);
+		if (pipe->req_clk > mdp_max_clk) {
+			pr_err("%s: high clock rate requested while composing, switch to GPU! req=%d max=%d",
+							__func__, pipe->req_clk, mdp_max_clk);
+			mdp4_overlay_pipe_free(pipe);
+			return -EINVAL;
+		}
+	}
+#endif
 
 	*ppipe = pipe;
 

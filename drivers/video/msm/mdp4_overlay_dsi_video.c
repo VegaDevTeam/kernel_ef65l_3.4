@@ -690,6 +690,9 @@ int mdp4_dsi_video_off(struct platform_device *pdev)
 	struct mdp4_overlay_pipe *pipe;
 	unsigned long flags;
 	int need_wait = 0;
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SONY)
+	ret = panel_next_off(pdev);
+#endif
 
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
 	vctrl = &vsync_ctrl_db[cndx];

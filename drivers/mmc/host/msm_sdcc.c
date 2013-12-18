@@ -2722,15 +2722,38 @@ static int msmsdcc_cfg_mpm_sdiowakeup(struct msmsdcc_host *host,
 
 	return ret;
 }
-
+#ifdef CONFIG_SKY_MMC
+extern unsigned int msm8x60_sdcc_slot_status(void);
+#endif
 static u32 msmsdcc_setup_pwr(struct msmsdcc_host *host, struct mmc_ios *ios)
 {
 	u32 pwr = 0;
 	int ret = 0;
 	struct mmc_host *mmc = host->mmc;
+#ifdef CONFIG_SKY_MMC
+	unsigned int slot_status;
+#endif
 
+#ifdef CONFIG_SKY_MMC
+	if(host->plat->translate_vdd && !host->sdio_gpio_lpm){
+		if(host->pdev_id == 3 && ios->power_mode == MMC_POWER_OFF){
+			slot_status = msm8x60_sdcc_slot_status();
+			if(mmc->bus_ops != NULL && slot_status){
+				ret = host->plat->translate_vdd(mmc_dev(mmc), 1); /* always on sdcc power */
+			} else {
+				ret = host->plat->translate_vdd(mmc_dev(mmc), ios->vdd);
+				/* case sdcc_inserted & normal status */
+				if(!mmc->bus_ops && slot_status) 
+					msleep(500);
+			}
+		} else {
+			ret = host->plat->translate_vdd(mmc_dev(mmc), ios->vdd);
+		}
+	}
+#else
 	if (host->plat->translate_vdd && !host->sdio_gpio_lpm)
 		ret = host->plat->translate_vdd(mmc_dev(mmc), ios->vdd);
+#endif		
 	else if (!host->plat->translate_vdd && !host->sdio_gpio_lpm)
 		ret = msmsdcc_setup_vreg(host, !!ios->vdd, false);
 
