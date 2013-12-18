@@ -102,6 +102,9 @@ struct smsm_interrupt_info {
 #define SMD_CHANNELS             64
 #define SMD_HEADER_SIZE          20
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#define MAX_CRASH_BUF_SIZE 0x60000 // 384Kbytes
+#endif
 /* 'type' field of smd_alloc_elm structure
  * has the following breakup
  * bits 0-7   -> channel type
@@ -250,7 +253,9 @@ extern spinlock_t smem_lock;
 
 
 void smd_diag(void);
-
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+void smem_diag_set_message(char *message);
+#endif /* CONFIG_PANTECH_ERR_CRASH_LOGGING */
 struct interrupt_stat {
 	uint32_t smd_in_count;
 	uint32_t smd_out_hardcode_count;

@@ -20,7 +20,11 @@
 #include <linux/platform_device.h>
 #include <linux/log2.h>
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <linux/io.h>
+#include <linux/mfd/pmic8058.h>//pdj666 20120302
 #include <linux/mfd/pm8xxx/core.h>
+#endif
 #include <linux/input/pmic8xxx-pwrkey.h>
 
 #define PON_CNTL_1 0x1C
@@ -37,6 +41,23 @@ struct pmic8xxx_pwrkey {
 	int key_press_irq;
 	const struct pm8xxx_pwrkey_platform_data *pdata;
 };
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+struct pm8058_oem_pwrkey_chip {
+	struct device		*dev;
+	int oem_pwrkey_release_irq;
+	int oem_pwrkey_press_irq;
+};
+static struct pm8058_oem_pwrkey_chip *pwrkey_pm_chip;
+
+int pm8xxx_get_pwrkey_status(void)
+{
+	if (!pwrkey_pm_chip)
+		return 0;
+
+	return pm8xxx_read_irq_stat(pwrkey_pm_chip->dev->parent, pwrkey_pm_chip->oem_pwrkey_press_irq);
+}
+#endif //CONFIG_SW_RESET
 
 static irqreturn_t pwrkey_press_irq(int irq, void *_pwrkey)
 {
@@ -95,6 +116,14 @@ static int __devinit pmic8xxx_pwrkey_probe(struct platform_device *pdev)
 	const struct pm8xxx_pwrkey_platform_data *pdata =
 					dev_get_platdata(&pdev->dev);
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	struct pm8058_oem_pwrkey_chip *chip;
+	chip = kzalloc(sizeof(struct pm8058_oem_pwrkey_chip),
+					GFP_KERNEL);
+
+	chip->dev = &pdev->dev;
+	chip->oem_pwrkey_press_irq   = key_press_irq;
+#endif
 	if (!pdata) {
 		dev_err(&pdev->dev, "power key platform data not supplied\n");
 		return -EINVAL;
@@ -158,6 +187,9 @@ static int __devinit pmic8xxx_pwrkey_probe(struct platform_device *pdev)
 	pwrkey->pwr = pwr;
 
 	platform_set_drvdata(pdev, pwrkey);
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	pwrkey_pm_chip = chip;
+#endif
 
 	err = request_any_context_irq(key_press_irq, pwrkey_press_irq,
 		IRQF_TRIGGER_RISING, "pmic8xxx_pwrkey_press", pwrkey);

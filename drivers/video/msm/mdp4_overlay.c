@@ -3780,3 +3780,15 @@ int mdp4_update_base_blend(struct msm_fb_data_type *mfd,
 	}
 	return ret;
 }
+
+
+#if defined(CONFIG_PANTECH_ERR_CRASH_LOGGING)
+void force_mdp4_overlay_unset(void)
+{
+    mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+    outpdw(MDP_BASE + 0x10100, 0x100); /* MDP_LAYERMIXER_IN_CFG */
+    outpdw(MDP_BASE + 0x18000, 0x11/* bits */); /* MDP_OVERLAY_REG_FLUSH */
+    mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+}
+EXPORT_SYMBOL(force_mdp4_overlay_unset);
+#endif

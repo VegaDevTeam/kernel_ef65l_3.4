@@ -36,6 +36,14 @@
 
 #include "smd_private.h"
 
+#ifdef CONFIG_PANTECH_PWR_ONOFF_REASON_CNT
+#include "sky_sys_reset.h"
+#endif
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+extern void pantech_errlog_display_put_log(const char *log, int size);
+#endif
+
 struct subsys_soc_restart_order {
 	const char * const *subsystem_list;
 	int count;
@@ -459,14 +467,22 @@ static void __subsystem_restart(struct subsys_data *subsys)
 int subsystem_restart(const char *subsys_name)
 {
 	struct subsys_data *subsys;
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	char dispbuf[512];
+#endif
 
 	if (!subsys_name) {
 		pr_err("Invalid subsystem name.\n");
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	pr_info("Subsystem Restart: Restart sequence requested for  %s, restart_level %d\n",
+		subsys_name, restart_level);
+#else
 	pr_info("Restart sequence requested for %s, restart_level = %d.\n",
 		subsys_name, restart_level);
+#endif
 
 	/* List of subsystems is protected by a lock. New subsystems can
 	 * still come in.
@@ -486,6 +502,27 @@ int subsystem_restart(const char *subsys_name)
 		break;
 
 	case RESET_SOC:
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING  
+		if (!strncmp(subsys_name, "modem", 5)) {
+#ifdef CONFIG_PANTECH_PWR_ONOFF_REASON_CNT
+                        sky_reset_reason=SYS_RESET_REASON_EXCEPTION;
+#endif
+                        strcpy(dispbuf,"\n\n     [APQ MODEM ERROR]\n\n");
+		}
+		else if (!strncmp(subsys_name, "external_modem", 14)) {
+#ifdef CONFIG_PANTECH_PWR_ONOFF_REASON_CNT
+                        sky_reset_reason=SYS_RESET_REASON_MDM_EXCEPTION;
+#endif
+                        strcpy(dispbuf,"\n\n     [MDM ERROR]\n\n");
+		}
+  
+		strcat(dispbuf,"\n\n     Rebooting cause of Crash\n\n");
+		strcat(dispbuf,"\n\n     Press Power key for reboot\n\n");
+		strcat(dispbuf,"\n\n     Wait a minute for saving logs until rebooting \n\n");  
+		pantech_errlog_display_put_log(dispbuf, strlen(dispbuf));
+#endif
+
 		panic("subsys-restart: Resetting the SoC - %s crashed.",
 			subsys->name);
 		break;

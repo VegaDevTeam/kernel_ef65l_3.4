@@ -36,6 +36,13 @@ struct mod_arch_specific {
 #define MODULE_ARCH_VERMAGIC_P2V ""
 #endif
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+extern struct pt_regs *__get_regs_crashed(void);
+extern void __save_regs_and_mmu(struct pt_regs *);
+extern void (*arm_crash_reset)(void);
+extern void printcrash(const char *fmt, ...);
+#endif
+
 /* Add instruction set architecture tag to distinguish ARM/Thumb kernels */
 #ifdef CONFIG_THUMB2_KERNEL
 #define MODULE_ARCH_VERMAGIC_ARMTHUMB "thumb2 "

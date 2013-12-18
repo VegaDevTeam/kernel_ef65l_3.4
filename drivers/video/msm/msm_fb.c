@@ -49,8 +49,14 @@
 #include "mdp.h"
 #include "mdp4.h"
 
+#ifdef CONFIG_SW_RESET
+#include "../../../arch/arm/mach-msm/sky_sys_reset.h"
+#endif
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MSM_FB_NUM	3
+#endif
+#ifdef CONFIG_SW_RESET
+#define REBOOT_IMAGE_FILE "/reboot.rle"
 #endif
 
 static unsigned char *fbram;
@@ -855,6 +861,9 @@ void msm_fb_set_backlight(struct msm_fb_data_type *mfd, __u32 bkl_lvl)
 	}
 }
 
+#ifdef CONFIG_SW_RESET
+void msm_reset_set_bl(int bl);
+#endif
 static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			    boolean op_enable)
 {
@@ -878,6 +887,9 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 			ret = pdata->on(mfd->pdev);
 			if (ret == 0) {
 				mfd->panel_power_on = TRUE;
+#ifdef CONFIG_SW_RESET
+				msm_reset_set_bl(1);
+#endif
 
 /* ToDo: possible conflict with android which doesn't expect sw refresher */
 /*
@@ -908,6 +920,9 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 			msleep(16);
 			ret = pdata->off(mfd->pdev);
+#ifdef CONFIG_SW_RESET
+			msm_reset_set_bl(0);
+#endif
 			if (ret)
 				mfd->panel_power_on = curr_pwr_state;
 
@@ -1081,6 +1096,57 @@ static int msm_fb_mmap(struct fb_info *info, struct vm_area_struct * vma)
 	return 0;
 }
 
+#if defined(CONFIG_F_SKYDISP_LCD_FORCE_ONOFF) 
+/* just force lcd on/off, no backlight control */
+static int msm_fb_blank_sub_force(int onoff, struct fb_info *info, int bl)
+{
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
+	struct msm_fb_panel_data *pdata = NULL;
+	int ret = 0;
+
+	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
+	if ((!pdata) || (!pdata->on) || (!pdata->off)) {
+		MSM_FB_ERR("msm_fb_blank_sub_force: no panel operation detected!\n");
+		return -ENODEV;
+	}
+
+	MSM_FB_ERR("[LIVED] msm_fb_blank_sub_force: onoff=%d, mfd->panel_power_on=%d\n",
+			onoff, mfd->panel_power_on);
+	if (onoff) {
+		if (!mfd->panel_power_on) {
+			msleep(16);
+			ret = pdata->on(mfd->pdev);
+			if (ret == 0) {
+				mfd->panel_power_on = TRUE;
+				msleep(16);
+				if (bl == 1) {
+					msm_fb_set_backlight_old(mfd, mfd->bl_level, 0);
+				}
+			}
+		}
+	} else {
+		if (mfd->panel_power_on) {
+			int curr_pwr_state;
+
+			//mfd->op_enable = FALSE;
+			curr_pwr_state = mfd->panel_power_on;
+			mfd->panel_power_on = FALSE;
+
+			if (bl == 1) {
+				msm_fb_set_backlight_old(mfd, 0, 0);
+			}
+			msleep(16);
+			ret = pdata->off(mfd->pdev);
+			if (ret)
+				mfd->panel_power_on = curr_pwr_state;
+
+			//mfd->op_enable = TRUE;
+        }
+    }
+	return ret;
+}
+#endif
+
 static struct fb_ops msm_fb_ops = {
 	.owner = THIS_MODULE,
 	.fb_open = msm_fb_open,
@@ -1115,6 +1181,129 @@ static __u32 msm_fb_line_length(__u32 fb_index, __u32 xres, int bpp)
 		return xres * bpp;
 }
 
+#ifdef CONFIG_SW_RESET
+#define RESTART_BL_ON		0x9A247D59
+#define RESTART_BL_OFF		0x1B93214E
+int msm_reset_get_bl(void)
+{
+	void *restart_bl;
+	int bl;
+
+	restart_bl = ioremap_nocache(RESTART_REASON_ADDR, 0x1000);
+	bl = readl(restart_bl+8);
+	iounmap(restart_bl);
+	if (bl == RESTART_BL_ON) {
+		bl = 1;
+	} else if (bl == RESTART_BL_OFF) {
+		bl = 0;
+	} else {
+		bl = -1;
+	}
+
+	MSM_FB_ERR("[LIVED] reset_get_bl=%d\n", bl);
+
+	return bl;
+}
+
+void msm_reset_set_bl(int bl)
+{
+	void *restart_bl;
+
+	restart_bl = ioremap_nocache(RESTART_REASON_ADDR, 0x1000);
+	if (bl > 0) {
+		bl = RESTART_BL_ON;
+	} else {
+		bl = RESTART_BL_OFF;
+	}
+	writel(bl, restart_bl+8);
+	iounmap(restart_bl);
+
+	MSM_FB_ERR("[LIVED] reset_set_bl=%x\n", bl);
+}
+
+int msm_reset_reason_read_only(void)
+{
+	void *restart_reason;
+	int reason, result;
+
+	restart_reason = ioremap_nocache(RESTART_REASON_ADDR, 0x1000);
+	reason = readl(restart_reason);
+
+	iounmap(restart_reason);
+	switch (reason)
+	{
+	case SYS_RESET_REASON_EXCEPTION:
+	case SYS_RESET_REASON_ASSERT:
+	case SYS_RESET_REASON_LINUX:
+	case SYS_RESET_REASON_ANDROID:
+	case SYS_RESET_REASON_ABNORMAL:
+	case SYS_RESET_REASON_MDM_EXCEPTION:
+	case SYS_RESET_REASON_UNKNOWN:
+		result = 1;
+		break;
+	default:
+		result = 0;
+		break;
+	}
+
+	MSM_FB_INFO("[LIVED] msm_reset_reason_read_only:reason[%x],result[%x]\n",reason,result);
+	return result;
+}
+
+int msm_reset_reason(void)
+{
+	void *restart_reason;
+	int reason, result;
+	struct proc_dir_entry *reset_info;
+
+	restart_reason = ioremap_nocache(RESTART_REASON_ADDR, 0x1000);
+	reason = readl(restart_reason);
+
+	sky_sys_rst_set_prev_reset_info();
+
+	reset_info = create_proc_entry("pantech_resetinfo" , \
+			S_IRUGO | S_IWUGO, NULL);
+
+	if (reset_info) {
+		reset_info->read_proc = sky_sys_rst_read_proc_reset_info;
+		reset_info->write_proc = sky_sys_rst_write_proc_reset_info;
+		reset_info->data = NULL;
+	}
+
+	//writel(SYS_RESET_REASON_ABNORMAL, restart_reason);
+	iounmap(restart_reason);
+
+	switch (reason)
+	{
+	case SYS_RESET_REASON_EXCEPTION:
+	case SYS_RESET_REASON_ASSERT:
+	case SYS_RESET_REASON_LINUX:
+	case SYS_RESET_REASON_ANDROID:
+	case SYS_RESET_REASON_ABNORMAL:
+	case SYS_RESET_REASON_MDM_EXCEPTION:
+	case SYS_RESET_REASON_UNKNOWN:
+		result = 1;
+		break;
+	default:
+		result = 0;
+		break;
+	}
+
+	MSM_FB_ERR("[allydrop] msm_reset_reason:reason[%x],result[%x]\n",reason,result);
+	return result;
+}
+
+static void msm_reset_reason_clear(void)
+{
+	void *restart_reason;
+
+	restart_reason = ioremap_nocache(RESTART_REASON_ADDR, 0x1000);
+	writel(SYS_RESET_REASON_ABNORMAL, restart_reason);
+	iounmap(restart_reason);
+
+	MSM_FB_ERR("[LIVED] msm_reset_reason_clear\n");
+}
+#endif
 static int msm_fb_register(struct msm_fb_data_type *mfd)
 {
 	int ret = -ENODEV;
@@ -1468,6 +1657,19 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	    ("FrameBuffer[%d] %dx%d size=%d bytes is registered successfully!\n",
 	     mfd->index, fbi->var.xres, fbi->var.yres, fbi->fix.smem_len);
 
+#ifdef CONFIG_SW_RESET
+		if (msm_reset_reason()) {
+			if (msm_reset_get_bl() == 1)
+				ret = load_565rle_image(REBOOT_IMAGE_FILE, bf_supported);
+			else {
+				ret = 1;
+			}
+		} else
+#endif
+
+#ifdef CONFIG_SW_RESET
+		msm_reset_reason_clear();
+#endif
 #ifdef CONFIG_FB_MSM_LOGO
 	/* Flip buffer */
 	if (!load_565rle_image(INIT_IMAGE_FILE, bf_supported))

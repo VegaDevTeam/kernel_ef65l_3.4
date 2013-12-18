@@ -36,6 +36,10 @@ static int pause_on_oops;
 static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+extern void apainc_kernel_stack_dump_end(void);
+#endif
+
 #ifndef CONFIG_PANIC_TIMEOUT
 #define CONFIG_PANIC_TIMEOUT 0
 #endif
@@ -107,6 +111,11 @@ void panic(const char *fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 	printk(KERN_EMERG "Kernel panic - not syncing: %s\n",buf);
+	
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	apainc_kernel_stack_dump_end();
+#endif
+
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing
@@ -139,6 +148,13 @@ void panic(const char *fmt, ...)
 		panic_blink = no_blink;
 
 	if (panic_timeout > 0) {
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING  
+		printk(KERN_EMERG "Rebooting cause of Linux Crash ");
+		if(arm_crash_reset){
+			arm_crash_reset();
+		} 
+#endif  
 		/*
 		 * Delay timeout seconds before rebooting the machine.
 		 * We can't use the "normal" timers since we just panicked.

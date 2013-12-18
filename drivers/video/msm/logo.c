@@ -101,3 +101,59 @@ err_logo_close_file:
 	return err;
 }
 EXPORT_SYMBOL(load_565rle_image);
+
+#ifdef CONFIG_SW_RESET
+int load_raw_image(char *filename)
+{
+	struct fb_info *info;
+	int fd, count, err = 0;
+	unsigned max;
+	IBUF_TYPE *bits;
+	char *data;
+
+	info = registered_fb[0];
+	if (!info) {
+		printk(KERN_WARNING "%s: Can not access framebuffer\n",
+				__func__);
+		return -ENODEV;
+	}
+
+	fd = sys_open(filename, O_RDONLY, 0);
+	if (fd < 0) {
+		printk(KERN_WARNING "%s: Can not open %s\n",
+				__func__, filename);
+		return -ENOENT;
+	}
+	count = sys_lseek(fd, (off_t)0, 2);
+	if (count <= 0) {
+		err = -EIO;
+		goto err_logo_close_file;
+	}
+	sys_lseek(fd, (off_t)0, 0);
+	data = kmalloc(count, GFP_KERNEL);
+	if (!data) {
+		printk(KERN_WARNING "%s: Can not alloc data\n", __func__);
+		err = -ENOMEM;
+		goto err_logo_close_file;
+	}
+	if (sys_read(fd, (char *)data, count) != count) {
+		err = -EIO;
+		goto err_logo_free_data;
+	}
+
+	max = fb_width(info) * fb_height(info);
+	bits = (IBUF_TYPE *)(info->screen_base);
+	while (max--) {
+		bits[max] = data[max*3-1] << 16;
+		bits[max] |= data[max*3-2] << 8;
+		bits[max] |= data[max*3];
+	}
+
+err_logo_free_data:
+	kfree(data);
+err_logo_close_file:
+	sys_close(fd);
+	return err;
+}
+EXPORT_SYMBOL(load_raw_image);
+#endif

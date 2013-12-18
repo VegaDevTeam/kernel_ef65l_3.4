@@ -52,6 +52,11 @@ static void __iomem *msm_tmr0_base;
 static unsigned long delay_time;
 static unsigned long bark_time;
 static unsigned long long last_pet;
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+static int stack_dump_disable = 0;
+#endif
+
 static bool has_vic;
 
 /*
@@ -279,9 +284,21 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 		msm_watchdog_resume(NULL);
 	}
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	stack_dump_disable = 1;
+#endif
+  
 	panic("Apps watchdog bark received!");
 	return IRQ_HANDLED;
 }
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+int pantech_kernel_stack_dump_disable(void)
+{
+	return stack_dump_disable;
+}
+EXPORT_SYMBOL(pantech_kernel_stack_dump_disable);
+#endif
 
 #define SCM_SET_REGSAVE_CMD 0x2
 

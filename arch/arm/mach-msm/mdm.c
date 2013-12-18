@@ -40,6 +40,9 @@
 #include "msm_watchdog.h"
 #include "devices.h"
 #include "clock.h"
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#include <mach/system.h>
+#endif
 
 #define CHARM_MODEM_TIMEOUT	6000
 #define CHARM_HOLD_TIME		4000
@@ -119,8 +122,11 @@ static int charm_panic_prep(struct notifier_block *this,
 
 	CHARM_DBG("%s: setting AP2MDM_ERRFATAL high for a non graceful reset\n",
 			 __func__);
+
+#if 0 //P10911 block for mdm restart fail  //CONFIG_PANTECH_ERR_CRASH_LOGGING
 	if (get_restart_level() == RESET_SOC)
 		pm8xxx_stay_on();
+#endif
 
 	charm_disable_irqs();
 #if defined (CONFIG_MSM_8X60_FUSION_GPIO_GLITCH)
@@ -235,7 +241,12 @@ struct miscdevice charm_modem_misc = {
 static void charm_status_fn(struct work_struct *work)
 {
 	pr_info("Reseting the charm because status changed\n");
+	
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+	arch_reset(0, 0);
+#else
 	subsystem_restart("external_modem");
+#endif
 }
 
 static DECLARE_WORK(charm_status_work, charm_status_fn);
@@ -243,8 +254,10 @@ static DECLARE_WORK(charm_status_work, charm_status_fn);
 static void charm_fatal_fn(struct work_struct *work)
 {
 	pr_info("Reseting the charm due to an errfatal\n");
+#if 0 //P10911 block for mdm restart fail  //CONFIG_PANTECH_ERR_CRASH_LOGGING
 	if (get_restart_level() == RESET_SOC)
 		pm8xxx_stay_on();
+#endif
 	subsystem_restart("external_modem");
 }
 
