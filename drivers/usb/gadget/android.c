@@ -1471,7 +1471,6 @@ android_bind_enabled_functions(struct android_dev *dev,
 	struct android_usb_function *f;
 	int ret;
 
-	printk("%s \n",__func__);
 	list_for_each_entry(f, &dev->enabled_functions, enabled_list) {
 		ret = f->bind_config(f, c);
 		if (ret) {
@@ -1487,7 +1486,6 @@ android_unbind_enabled_functions(struct android_dev *dev,
 			       struct usb_configuration *c)
 {
 	struct android_usb_function *f;
-	printk("%s \n",__func__);
 
 	list_for_each_entry(f, &dev->enabled_functions, enabled_list) {
 		if (f->unbind_config)
@@ -1572,7 +1570,10 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	char *name;
 	char buf[256], *b;
 	int err;
-
+#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
+	struct android_usb_function **functions;
+	struct android_usb_function *f;
+#endif
 	mutex_lock(&dev->mutex);
 
 	if (dev->enabled) {
@@ -1580,8 +1581,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 		return -EBUSY;
 	}
 #ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	struct android_usb_function **functions;
-	struct android_usb_function *f;
 
 	printk(KERN_ERR "[%s] called\n", __func__);
 	if(b_pantech_usb_module){
@@ -2030,7 +2029,6 @@ static int android_create_device(struct android_dev *dev)
 	return 0;
 }
 
-#ifndef CONFIG_ANDROID_PANTECH_USB_MANAGER//pdj666
 static void android_destroy_device(struct android_dev *dev)
 {
 	struct device_attribute **attrs = android_usb_attributes;
@@ -2040,7 +2038,6 @@ static void android_destroy_device(struct android_dev *dev)
 		device_remove_file(dev->dev, attr);
 	device_destroy(android_class, dev->dev->devt);
 }
-#endif
 
 static int __devinit android_probe(struct platform_device *pdev)
 {

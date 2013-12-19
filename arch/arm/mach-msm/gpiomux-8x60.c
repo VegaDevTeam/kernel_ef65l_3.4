@@ -21,6 +21,12 @@ static struct gpiomux_setting console_uart = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 
+static struct gpiomux_setting gsbi1 = {
+	.func = GPIOMUX_FUNC_1,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
 #if !defined(CONFIG_EF65L_SENSORS_APDS9900_SW)
 /* The SPI configurations apply to GSBI1 and GSBI10 */
 static struct gpiomux_setting spi_active = {
@@ -72,6 +78,12 @@ static struct gpiomux_setting i2c_suspended_config = {
 static struct gpiomux_setting gsbi8 = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting gsbi10 = {
+    .func = GPIOMUX_FUNC_1,
+    .drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
@@ -470,15 +482,13 @@ static struct msm_gpiomux_config msm8x60_gsbi_configs[] __initdata = {
 	{
 		.gpio      = 33,
 		.settings = {
-			[GPIOMUX_SUSPENDED] = &spi_suspended_config,
-			[GPIOMUX_ACTIVE]    = &spi_active,
+			[GPIOMUX_SUSPENDED] = &gsbi1,
 		},
 	},
 	{
 		.gpio      = 34,
 		.settings = {
-			[GPIOMUX_SUSPENDED] = &spi_suspended_config,
-			[GPIOMUX_ACTIVE]    = &spi_active,
+			[GPIOMUX_SUSPENDED] = &gsbi1,
 		},
 	},
 #if !defined(CONFIG_EF65L_SENSORS_MPU3050) 		
@@ -1724,12 +1734,18 @@ static struct msm_gpiomux_config msm8x60_charm_configs[] __initdata = {
 		}
 	},
 	/* MDM2AP_WAKEUP */
+#ifndef CONFIG_SKY_TDMB_SPI_IF
 	{
+	#ifdef CONFIG_SKY_EF65L_BOARD
+		.gpio = 45,
+	#else
 		.gpio = 40,
+	#endif		
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &ap2mdm_cfg,
 		}
 	},
+#endif
 	/* MDM2AP_ERRFATAL */
 	{
 		.gpio = 133,

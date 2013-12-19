@@ -12,6 +12,25 @@
  * GNU General Public License for more details.
  *
  */
+ 
+#ifndef _MACH_SYSTEM_H
+#define _MACH_SYSTEM_H
+
+#include <mach/hardware.h>
+#include <mach/restart.h>
+
+void arch_idle(void);
+
+//Pantech
+//#if defined(CONFIG_MSM_NATIVE_RESTART) || defined(CONFIG_ARCH_FSM9XXX)
+#if defined(CONFIG_ARCH_MSM8X60) || defined(CONFIG_MACH_MSM8X60_EF65L)
+#define arch_reset(mode, cmd) msm_restart(mode, cmd)
+#else
+static inline void arch_reset(char mode, const char *cmd)
+{
+	for (;;) ;  /* depends on IPC w/ other core */
+}
+#endif
 
 /* low level hardware reset hook -- for example, hitting the
  * PSHOLD line on the PMIC to hard reset the system
@@ -20,3 +39,4 @@ extern void (*msm_hw_reset_hook)(void);
 
 void msm_set_i2c_mux(bool gpio, int *gpio_clk, int *gpio_dat);
 
+#endif

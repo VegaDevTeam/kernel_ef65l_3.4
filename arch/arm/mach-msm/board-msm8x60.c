@@ -136,7 +136,7 @@
 #endif /* CONFIG_SKY_GSBI12_UART_CONSOLE PZ2223 */
 
 //pz1946 20110907 interrupt pin change
-#if (defined(CONFIG_SKY_SMB136S_CHARGER)
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
 #define SC_DET_IRQ_GPIO	8
 #define SC_STAT_IRQ_GPIO	63
 #endif
@@ -1954,7 +1954,11 @@ static int config_camera_on_gpios(void)
 
 #ifdef CONFIG_MSM_CAMERA_FLASH
 #ifdef CONFIG_IMX074
-	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())
+	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+		|| machine_is_msm8x60_ef65l()
+#endif
+		)
 		strobe_flash_xenon.flash_charge = FUSION_VFE_CAMIF_TIMER1_GPIO;
 #endif
 #endif
@@ -6356,19 +6360,15 @@ static void __init size_pmem_devices(void)
 	if (hdmi_is_primary)
 		pmem_sf_size = MSM_HDMI_PRIM_PMEM_SF_SIZE;
 	android_pmem_pdata.size = pmem_sf_size;
+#endif
 	android_pmem_audio_pdata.size = MSM_PMEM_AUDIO_SIZE;
-#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
-#endif /*CONFIG_ANDROID_PMEM*/
+#endif
 }
 
-#ifdef CONFIG_ANDROID_PMEM
-#ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
 static void __init reserve_memory_for(struct android_pmem_platform_data *p)
 {
 	msm8x60_reserve_table[p->memory_type].size += p->size;
 }
-#endif /*CONFIG_MSM_MULTIMEDIA_USE_ION*/
-#endif /*CONFIG_ANDROID_PMEM*/
 
 static void __init reserve_pmem_memory(void)
 {
@@ -9571,10 +9571,12 @@ static struct mmc_platform_data msm8x60_sdc3_data = {
 	.translate_vdd  = msm_sdcc_setup_power,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 	.wpswitch  	= msm_sdc3_get_wpswitch,
+#ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
 	.status      = msm8x60_sdcc_slot_status,
 	.status_irq  = PM8058_GPIO_IRQ(PM8058_IRQ_BASE,
 				       PMIC_GPIO_SDC3_DET - 1),
 	.irq_flags   = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+#endif
 	.msmsdcc_fmin	= 400000,
 	.msmsdcc_fmid	= 24000000,
 	.msmsdcc_fmax	= 48000000,
@@ -10785,7 +10787,6 @@ static struct msm_bus_scale_pdata dtv_bus_scale_pdata = {
 
 static struct lcdc_platform_data dtv_pdata = {
 	.bus_scale_table = &dtv_bus_scale_pdata,
-	.lcdc_power_save = hdmi_panel_power,
 };
 
 static struct msm_bus_paths dtv_hdmi_prim_bus_scale_usecases[] = {

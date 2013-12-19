@@ -141,9 +141,9 @@ static int mipi_sony_lcd_on(struct platform_device *pdev)
 	//mutex_lock(&mfd->dma->ov_mutex);
 	if (sony_state.disp_initialized == false) {
 		//PRINT("[LIVED] LCD RESET!!\n");
-		gpio_set_value(LCD_RESET, GPIO_LOW_VALUE);
+		__gpio_set_value(LCD_RESET, GPIO_LOW_VALUE);
 		usleep(10);//msleep(1);
-		gpio_set_value(LCD_RESET, GPIO_HIGH_VALUE);
+		__gpio_set_value(LCD_RESET, GPIO_HIGH_VALUE);
 		usleep(10);//msleep(120);
 		sony_state.disp_initialized = true;
 	}
@@ -172,9 +172,9 @@ static int mipi_sony_lcd_off(struct platform_device *pdev)
 
     //mutex_lock(&mfd->dma->ov_mutex); 
 	if (sony_state.disp_on == true) {
-		gpio_set_value(LCD_RESET, GPIO_LOW_VALUE);
+		__gpio_set_value(LCD_RESET, GPIO_LOW_VALUE);
 		usleep(10);//msleep(1);
-		gpio_set_value(LCD_RESET, GPIO_HIGH_VALUE);
+		__gpio_set_value(LCD_RESET, GPIO_HIGH_VALUE);
 		usleep(10);//msleep(120);
 
 		mipi_dsi_cmds_tx(&sony_tx_buf, sony_display_off_cmds,
@@ -200,7 +200,7 @@ static void mipi_sony_set_backlight(struct msm_fb_data_type *mfd)
 		PRINT("[LIVED] same! or not disp_on\n");
 	} else {
 		if (bl_level == 0) {
-			gpio_set_value(LCD_BL_EN ,GPIO_LOW_VALUE);
+			__gpio_set_value(LCD_BL_EN ,GPIO_LOW_VALUE);
 			usleep(500);
 		} else {
 			cnt = BL_MAX - bl_level;
@@ -209,10 +209,10 @@ static void mipi_sony_set_backlight(struct msm_fb_data_type *mfd)
 			do {
 				local_save_flags(flags);
 				local_irq_disable();
-				gpio_set_value(LCD_BL_EN ,GPIO_LOW_VALUE);
+				__gpio_set_value(LCD_BL_EN ,GPIO_LOW_VALUE);
 				udelay(1);	// T LO
 				//count++;
-				gpio_set_value(LCD_BL_EN ,GPIO_HIGH_VALUE);
+				__gpio_set_value(LCD_BL_EN ,GPIO_HIGH_VALUE);
 				udelay(1);	// T HI
 				local_irq_restore(flags);
 			} while (cnt--);

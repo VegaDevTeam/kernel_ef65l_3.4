@@ -753,6 +753,8 @@ static void memset32_io(u32 __iomem *_ptr, u32 val, size_t count)
 }
 #endif
 
+static void msm_fb_fillrect(struct fb_info *info,
+			    const struct fb_fillrect *rect);
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static void msmfb_early_suspend(struct early_suspend *h)
 {
@@ -775,6 +777,15 @@ static void msmfb_early_suspend(struct early_suspend *h)
 		memset32_io((void *)fbi->screen_base, 0x00, fbi->fix.smem_len);
 		break;
 	}
+#elif defined(CONFIG_PANTECH_HDMI_LOOKS_BLACK) 
+	struct fb_info *fbi = mfd->fbi;
+	struct fb_fillrect rect;
+	rect.dx = rect.dy = 0;
+	rect.width = fbi->var.xres_virtual;
+	rect.height = fbi->var.yres_virtual;
+	rect.color = 0;
+	rect.rop = ROP_COPY;
+	msm_fb_fillrect(fbi,&rect);
 #endif
 	msm_fb_suspend_sub(mfd);
 
@@ -849,6 +860,20 @@ void msm_fb_set_backlight(struct msm_fb_data_type *mfd, __u32 bkl_lvl)
 {
 	struct msm_fb_panel_data *pdata;
 	__u32 temp = bkl_lvl;
+	
+	
+	if (bkl_lvl == 0)
+	{
+		pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
+		if ((pdata) && (pdata->set_backlight)) {
+			down(&mfd->sem);
+			mfd->bl_level = bkl_lvl;
+			pdata->set_backlight(mfd);
+			up(&mfd->sem);
+			return;
+		}
+	}
+	
 	if (!mfd->panel_power_on || !bl_updated) {
 		unset_bl_level = bkl_lvl;
 		return;
@@ -1139,7 +1164,7 @@ static int msm_fb_blank_sub_force(int onoff, struct fb_info *info, int bl)
 				mfd->panel_power_on = TRUE;
 				msleep(16);
 				if (bl == 1) {
-					msm_fb_set_backlight_old(mfd, mfd->bl_level, 0);
+					msm_fb_set_backlight(mfd, mfd->bl_level);
 				}
 			}
 		}
@@ -1152,7 +1177,7 @@ static int msm_fb_blank_sub_force(int onoff, struct fb_info *info, int bl)
 			mfd->panel_power_on = FALSE;
 
 			if (bl == 1) {
-				msm_fb_set_backlight_old(mfd, 0, 0);
+				msm_fb_set_backlight(mfd, 0);
 			}
 			msleep(16);
 			ret = pdata->off(mfd->pdev);
@@ -1323,6 +1348,7 @@ static void msm_reset_reason_clear(void)
 	MSM_FB_ERR("[LIVED] msm_reset_reason_clear\n");
 }
 #endif
+
 static int msm_fb_register(struct msm_fb_data_type *mfd)
 {
 	int ret = -ENODEV;

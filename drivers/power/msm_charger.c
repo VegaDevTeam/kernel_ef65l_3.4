@@ -224,7 +224,7 @@ static int get_prop_battery_mvolts(void)
 	}
 }
 
-#if !(defined(CONFIG_SKY_SMB136S_CHARGER)
+#if !defined(CONFIG_SKY_SMB136S_CHARGER)
 static int get_battery_temperature(void)
 {
 	if (msm_batt_gauge && msm_batt_gauge->get_battery_temperature)

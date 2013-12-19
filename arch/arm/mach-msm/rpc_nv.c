@@ -18,6 +18,7 @@
  * along with this program; if not, you can find it at http://www.fsf.org
  */
 
+#include <linux/module.h>
 #include <linux/err.h>
 #include <mach/rpc_nv.h>
 #include <asm/mach-types.h>

@@ -1744,7 +1744,11 @@ void mdp4_overlay_borderfill_stage_up(struct mdp4_overlay_pipe *pipe)
 	else if (ctrl->panel_mode & MDP4_PANEL_LCDC)
 		mdp4_lcdc_base_swap(0, pipe);
 	else if (ctrl->panel_mode & MDP4_PANEL_DTV)
+    #ifdef CONFIG_FB_MSM_DTV  // 20120905 jylee 
 		mdp4_dtv_base_swap(0, pipe);
+    #else
+                mdp4_dtv_base_swap(pipe); 
+    #endif
 
 	mdp4_overlay_reg_flush(bspipe, 1);
 	/* borderfill pipe as base layer */
@@ -1798,7 +1802,11 @@ void mdp4_overlay_borderfill_stage_down(struct mdp4_overlay_pipe *pipe)
 	else if (ctrl->panel_mode & MDP4_PANEL_LCDC)
 		mdp4_lcdc_base_swap(0, bspipe);
 	else if (ctrl->panel_mode & MDP4_PANEL_DTV)
+    #ifdef CONFIG_FB_MSM_DTV // 20120905 jylee
 		mdp4_dtv_base_swap(0, bspipe);
+    #else
+                mdp4_dtv_base_swap(bspipe);
+    #endif
 
 	/* free borderfill pipe */
 	mdp4_overlay_reg_flush(pipe, 1);
@@ -2456,22 +2464,6 @@ static int mdp4_overlay_req2pipe(struct mdp_overlay *req, int mixer,
 	pipe->transp = req->transp_mask;
 
 	pipe->flags = req->flags;
-
-#ifdef CONFIG_ARCH_MSM8X60
-	/* If we're composing with MDP and we suddenly need a really outrageous clockrate,
-	 * just fail so that userspace switches to the GPU. If we don't do this, MDP will
-	 * switch to BLT mode, but it locks up and we never get any interrupts. Only seems to
-	 * happen on 8660 devices, so ifdeffed this appropriately. */
-	if (pipe->flags & MDP_BACKEND_COMPOSITION && req->id == MSMFB_NEW_REQUEST) {
-		mdp4_calc_pipe_mdp_clk(mfd, pipe);
-		if (pipe->req_clk > mdp_max_clk) {
-			pr_err("%s: high clock rate requested while composing, switch to GPU! req=%d max=%d",
-							__func__, pipe->req_clk, mdp_max_clk);
-			mdp4_overlay_pipe_free(pipe);
-			return -EINVAL;
-		}
-	}
-#endif
 
 	*ppipe = pipe;
 
@@ -3477,8 +3469,10 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 			mdp4_lcdc_pipe_queue(0, pipe);
 		}
 	} else if (pipe->mixer_num == MDP4_MIXER1) {
+            #ifdef CONFIG_FB_MSM_DTV  // 20120905 jylee
 		if (ctrl->panel_mode & MDP4_PANEL_DTV)
 			mdp4_dtv_pipe_queue(0, pipe);/* cndx = 0 */
+            #endif
 	}
 
 	mutex_unlock(&mfd->dma->ov_mutex);
@@ -3565,8 +3559,10 @@ int mdp4_overlay_commit(struct fb_info *info, int mixer)
 			mdp4_lcdc_pipe_commit(0, 1);
 		}
 	} else if (mixer == MDP4_MIXER1) {
+            #ifdef CONFIG_FB_MSM_DTV  // 20121112 gyeseong Lee for build (starq model does not compiled mdp4_overaly_dtv.c file)
 		if (ctrl->panel_mode & MDP4_PANEL_DTV)
 			mdp4_dtv_pipe_commit(0, 1);
+            #endif
 	}
 
 	mdp4_overlay_mdp_perf_upd(mfd, 0);

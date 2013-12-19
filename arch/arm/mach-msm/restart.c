@@ -347,11 +347,11 @@ void msm_restart(char mode, const char *cmd)
 
 static int __init msm_pmic_restart_init(void)
 {
-	void *imem = ioremap_nocache(IMEM_BASE, SZ_4K);
+//	void *imem = ioremap_nocache(IMEM_BASE, SZ_4K);
 	int rc;
 
 #if 1//FEATURE_DLOAD_HW_RESET_DETECT
-	void *phy_log_buf;//p14291_111214
+//	void *phy_log_buf;//p14291_111214
 #endif
 	
 	printk(KERN_ERR "[sky kobj]msm_restart_init ioremap_nocache\n");
@@ -364,8 +364,8 @@ static int __init msm_pmic_restart_init(void)
 	printk(KERN_ERR "[sky kobj]msm_restart_init ioremap_nocache\n");
 #if 1//FEATURE_DLOAD_HW_RESET_DETECT
 	//p14291_111214 --{
-	phy_log_buf = (void*)virt_to_phys((void*)get_log_buf_addr());
-	writel(phy_log_buf, restart_reason+0xc); //0x0,0x4:magic1,2 0x8:using at msm_fb
+//	phy_log_buf = (void*)virt_to_phys((void*)get_log_buf_addr());
+//	writel(phy_log_buf, restart_reason+0xc); //0x0,0x4:magic1,2 0x8:using at msm_fb
 	// --}
 #endif
 

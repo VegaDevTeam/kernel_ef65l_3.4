@@ -301,7 +301,9 @@ extern int usb_composite_probe(struct usb_composite_driver *driver,
 			       int (*bind)(struct usb_composite_dev *cdev));
 extern void usb_composite_unregister(struct usb_composite_driver *driver);
 extern void usb_composite_setup_continue(struct usb_composite_dev *cdev);
-
+// SKY PANTECH jhkang+++
+extern int composite_get_udc_state(void);
+// +++SKY PANTECH jhkang
 
 /**
  * struct usb_composite_device - represents one composite usb gadget

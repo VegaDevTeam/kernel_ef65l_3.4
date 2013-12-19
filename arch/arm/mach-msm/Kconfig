@@ -398,6 +398,9 @@ config MSM_RPM
 config MSM_RPM_SMD
 	depends on MSM_SMD
 	bool "Support for using SMD as the transport layer for communicatons with RPM"
+	
+config PANTECH_CAMERA_HW
+	bool "Pantech camera hw"
 
 config MSM_MPM
 	bool "Modem Power Manager"

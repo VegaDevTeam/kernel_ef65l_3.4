@@ -27,6 +27,10 @@
 #define MSM_GSBI5_QUP_I2C_BUS_ID 33
 #endif
 
+#if defined(CONFIG_PN544)
+#define MSM_GSBI10_QUP_I2C_BUS_ID 11
+#endif
+
 #if defined(CONFIG_SKY_SMB136S_CHARGER)
 #define MSM_SMB_I2C_BUS_ID 39
 #endif
