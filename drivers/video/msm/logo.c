@@ -24,7 +24,7 @@
 #include <linux/irq.h>
 #include <asm/system.h>
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
 #include "msm_fb.h"
 #endif
 
@@ -218,7 +218,7 @@ err_logo_close_file:
 EXPORT_SYMBOL(load_raw_image);
 #endif
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+#if defined(CONFIG_SKY_SMB136S_CHARGER)
 #ifdef CONFIG_FB_MSM_MIPI_DSI
 void mdp4_dsi_video_overlay(struct msm_fb_data_type *mfd);
 #endif

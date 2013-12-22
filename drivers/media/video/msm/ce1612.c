@@ -15,7 +15,7 @@
  * 02110-1301, USA.
  *
  */
-
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -218,9 +218,9 @@ static int ce1612_reset(int set)
 
 	if (!rc) {
 		SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-		gpio_set_value(SENSOR_RESET,0);		
+		__gpio_set_value(SENSOR_RESET,0);		
 		if(set){
-			gpio_set_value(SENSOR_RESET,1);		
+			__gpio_set_value(SENSOR_RESET,1);		
 		}
 	}
 	else{
@@ -396,13 +396,13 @@ static int ce1612_power(int on)
 		rc = gpio_tlmm_config(GPIO_CFG(SENSOR_1P1V_LOWQ, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(SENSOR_1P1V_LOWQ,1);					
+			__gpio_set_value(SENSOR_1P1V_LOWQ,1);					
 		}
 		mdelay(1);
 		rc = gpio_tlmm_config(GPIO_CFG(VDD_CORE_EN, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(VDD_CORE_EN,1);					
+			__gpio_set_value(VDD_CORE_EN,1);					
 		}
 		mdelay(1);
 		//VDD_HOSTIO1.8V
@@ -423,13 +423,13 @@ static int ce1612_power(int on)
 		rc = gpio_tlmm_config(GPIO_CFG(MT9D113_RESET, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(MT9D113_RESET,0);					
+			__gpio_set_value(MT9D113_RESET,0);					
 		}
 		mdelay(5);
 		rc = gpio_tlmm_config(GPIO_CFG(MT9D113_RESET, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(MT9D113_RESET,1);					
+			__gpio_set_value(MT9D113_RESET,1);					
 		}
 		mdelay(1);
 		
@@ -443,7 +443,7 @@ static int ce1612_power(int on)
 		rc = gpio_tlmm_config(GPIO_CFG(MT9D113_STANDBY, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(MT9D113_STANDBY,1);					
+			__gpio_set_value(MT9D113_STANDBY,1);					
 		}
 		mdelay(1);
 #endif		
@@ -486,7 +486,7 @@ static int ce1612_power(int on)
 		rc = gpio_tlmm_config(GPIO_CFG(SENSOR_STANDBY, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(SENSOR_STANDBY,1);					
+			__gpio_set_value(SENSOR_STANDBY,1);					
 		}
 		mdelay(1);
 		
@@ -507,7 +507,7 @@ static int ce1612_power(int on)
 		rc = gpio_tlmm_config(GPIO_CFG(SENSOR_STANDBY, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(SENSOR_STANDBY,0);					
+			__gpio_set_value(SENSOR_STANDBY,0);					
 		}
 		mdelay(1);
 		//VDD_AF2.8
@@ -543,7 +543,7 @@ static int ce1612_power(int on)
 		rc = gpio_tlmm_config(GPIO_CFG(MT9D113_STANDBY, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(MT9D113_STANDBY,0);					
+			__gpio_set_value(MT9D113_STANDBY,0);					
 		}
 		rc = regulator_disable(l9a_2p8v);
 		if (rc) {
@@ -555,7 +555,7 @@ static int ce1612_power(int on)
 		rc = gpio_tlmm_config(GPIO_CFG(MT9D113_RESET, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(MT9D113_RESET,0);					
+			__gpio_set_value(MT9D113_RESET,0);					
 		}
 		mdelay(1);
 		
@@ -577,12 +577,12 @@ static int ce1612_power(int on)
 		rc = gpio_tlmm_config(GPIO_CFG(VDD_CORE_EN, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(VDD_CORE_EN,0);					
+			__gpio_set_value(VDD_CORE_EN,0);					
 		}
 		rc = gpio_tlmm_config(GPIO_CFG(SENSOR_1P1V_LOWQ, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),GPIO_CFG_ENABLE);
 		if (!rc) {
 			SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-			gpio_set_value(SENSOR_1P1V_LOWQ,0);					
+			__gpio_set_value(SENSOR_1P1V_LOWQ,0);					
 		}
 
 		SKYCDBG("%s %s OFF Success:%d\n", __FILE__, __func__, __LINE__);
@@ -1825,7 +1825,7 @@ static int32_t ce1612_set_led_gpio_set(int32_t led_mode)
 	if (!rc)
 	{
 		SKYCDBG("%s enable_flash_main_gpio = %d\n", __func__, enable_flash_main_gpio);
-		gpio_set_value(CE1612_LED_FLASH_ENABLE_GPIO,enable_flash_main_gpio);					
+		__gpio_set_value(CE1612_LED_FLASH_ENABLE_GPIO,enable_flash_main_gpio);					
 	}
 	else
 	{
@@ -3206,7 +3206,7 @@ static long ce1612_set_sensor_mode(int mode)
 }
 
 #ifndef AF_STATE_POLLING
-	enable_irq(gpio_to_irq(57));
+	enable_irq(__gpio_to_irq(57));
 #endif
 	ce1612_irq_stat = 0;
 #endif
@@ -3322,7 +3322,7 @@ int ce1612_sensor_init(const struct msm_camera_sensor_info *data)
 
 	if (!rc) {
 		SKYCDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
-		gpio_set_value(139,1);
+		__gpio_set_value(139,1);
 		msleep(20);
         }
 #endif
@@ -3492,7 +3492,7 @@ int ce1612_sensor_release(void)
 
 #ifdef CONFIG_PANTECH_CAMERA//IRQ
 #ifndef AF_STATE_POLLING
-	disable_irq(gpio_to_irq(57));
+	disable_irq(__gpio_to_irq(57));
 #endif
 #endif
 
@@ -3606,14 +3606,14 @@ static int ce1612_sensor_probe(const struct msm_camera_sensor_info *info,
 		SKYCDBG("%s: tlmm err\n", __func__);
 		kfree(ce1612_sensorw);
 	}
-	rc = request_irq(gpio_to_irq(57), ce1612_interrupt, IRQF_TRIGGER_RISING, "ce1612", 0);
+	rc = request_irq(__gpio_to_irq(57), ce1612_interrupt, IRQF_TRIGGER_RISING, "ce1612", 0);
 	SKYCDBG("ce1612_sensorw = %p\n", ce1612_sensorw);
 	if (rc < 0) {
 		SKYCDBG("%s: request irq failed\n", __func__);
 		kfree(ce1612_sensorw);
 		return rc;
 	}
-	disable_irq(gpio_to_irq(57));
+	disable_irq(__gpio_to_irq(57));
 #endif
 #endif
 
