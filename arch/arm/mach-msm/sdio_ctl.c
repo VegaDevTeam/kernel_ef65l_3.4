@@ -206,7 +206,7 @@ static long sdio_ctl_ioctl(struct file *file, unsigned int cmd,
 
 	return ret;
 }
-
+#if (0)	// for poor throughput issue. roll-back ICS
 static unsigned int sdio_ctl_poll(struct file *file, poll_table *wait)
 {
 	struct sdio_ctl_dev *sdio_ctl_devp;
@@ -234,7 +234,7 @@ static unsigned int sdio_ctl_poll(struct file *file, poll_table *wait)
 
 	return mask;
 }
-
+#endif
 ssize_t sdio_ctl_read(struct file *file,
 		      char __user *buf,
 		      size_t count,
@@ -446,7 +446,9 @@ static const struct file_operations sdio_ctl_fops = {
 	.release = sdio_ctl_release,
 	.read = sdio_ctl_read,
 	.write = sdio_ctl_write,
+#if (0)	// for poor throughput issue. roll-back ICS	
 	.poll = sdio_ctl_poll,
+#endif
 	.unlocked_ioctl = sdio_ctl_ioctl,
 };
 

@@ -47,6 +47,10 @@
 #define PPP_ADDR	0xFF
 #define PPP_CTRL	0x03
 
+#ifndef PPP_MTU
+#define PPP_MTU 1500
+#endif
+
 struct header {
 	__u16	bits;
 	__u16	type;

@@ -32,12 +32,24 @@
 #include <mach/msm_xo.h>
 #include <mach/msm_hsusb.h>
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#ifdef CONFIG_SKY_CHARGING
 #include <mach/mpp.h>
 #include <linux/pmic8058-xoadc.h>
 #include <mach/board-msm8660.h>
+#endif
+
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
 #include <linux/reboot.h>
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#include <linux/pmic8058-xoadc.h>
+#include <mach/mpp.h>
+#include <mach/board-msm8660.h>
+#endif
+
+
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244 // 20110627, kkcho, for  MHL-cable-detect, MHL_KKCHO
+#define F_MHL_AUTO_CONNECT
+#endif
+
 /* Config Regs  and their bits*/
 #define PM8058_CHG_TEST			0x75
 #define IGNORE_LL			2
@@ -133,8 +145,10 @@
 #define PM8058_CHG_I_TERM_STEP_MA 10
 #define PM8058_CHG_V_STEP_MV 25
 #define PM8058_CHG_V_MIN_MV  2400
-//pz1946 20111001 charging status only batt id check
-extern int smb_charger_state;
+
+
+#define FEATURE_ICS_FACTORY_CABLE_ADC_CAL
+
 /*
  * enum pmic_chg_interrupts: pmic interrupts
  * @CHGVAL_IRQ: charger V between 3.3 and 7.9
@@ -181,9 +195,9 @@ enum pmic_chg_interrupts {
 	BATFET_IRQ,
 	BATT_REPLACE_IRQ,
 	BATTCONNECT_IRQ,
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
 	BATTID_IRQ,
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#endif
 	PMIC_CHG_MAX_INTS
 };
 
@@ -210,25 +224,26 @@ struct pm8058_charger {
 
 	int inited;
 	int present;
+
+	int verylow_battery;
 };
 
 static struct pm8058_charger pm8058_chg;
 static struct msm_hardware_charger usb_hw_chg;
 static struct pmic8058_charger_data chg_data;
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-static int is_nobattery_with_factory_cable;
-int pm8058_is_factory_cable(void);
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+/*static*/ int pm8058_is_factory_cable(void);
+#endif
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#ifdef CONFIG_SKY_CHARGING
 static int pm8058_is_battery_id_valid(void);
+static int save_current;
+static int start_fast_charging = 0;
 extern unsigned int msm_charger_is_incall(void);
-#endif //CONFIG_SKY_SMB136S_CHARGER
-
-#if defined(CONFIG_SKY_BATTERY_MAX17043)
-extern int max17040_get_voltage(void);
-#endif //CONFIG_SKY_BATTERY_MAX17043
+extern int is_lcd_on(void);
+static int sky_plug_state; //ps2 team shs : plug_state function
+#endif
 
 static int msm_battery_gauge_alarm_notify(struct notifier_block *nb,
 					  unsigned long status, void *unused);
@@ -293,9 +308,25 @@ static int pm_chg_get_rt_status(int irq)
 		return ret;
 }
 
+#ifdef CONFIG_SKY_CHARGING 
+//ps2 team shs : add function
+int sky_get_plug_state(void)
+{
+	return sky_plug_state;
+}
+#endif
+
 static int is_chg_plugged_in(void)
 {
+#ifdef CONFIG_SKY_CHARGING 
+	int ret;
+	ret = pm_chg_get_rt_status(pm8058_chg.pmic_chg_irq[CHGVAL_IRQ]);
+	
+	sky_plug_state=ret;
+	return ret;
+#else
 	return pm_chg_get_rt_status(pm8058_chg.pmic_chg_irq[CHGVAL_IRQ]);
+#endif
 }
 
 #ifdef DEBUG
@@ -494,6 +525,10 @@ static int pm_chg_imaxsel_set(int chg_current)
 	u8 temp;
 	int diff;
 
+#ifdef CONFIG_SKY_CHARGING
+        pr_info("[SKY_CHG] %s: %d\n", __func__, chg_current);
+#endif
+
 	diff = chg_current - PM8058_CHG_I_MIN_MA;
 	if (diff < 0) {
 		dev_warn(pm8058_chg.dev, "%s bad mA=%d asked to set\n",
@@ -510,12 +545,29 @@ static int pm_chg_imaxsel_set(int chg_current)
 	return pm8xxx_writeb(pm8058_chg.dev->parent, PM8058_CHG_IMAX, temp);
 }
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-int pm8058_chg_nobattery_factory_cable(void)
+#ifdef CONFIG_SKY_CHARGING
+void pm8058_chg_set_current_incall(int chg_current)
 {
-        return is_nobattery_with_factory_cable;
+        pr_info("[SKY_CHG]%s: incall current is %d\n", __func__, chg_current);
+        pm_chg_imaxsel_set(chg_current);
 }
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+EXPORT_SYMBOL(pm8058_chg_set_current_incall);
+
+void pm8058_chg_set_current_temperature(int chg_current)
+{
+        static int saved_current = 0;
+
+        if(saved_current == chg_current)
+            return;
+
+        if(!start_fast_charging)
+            return;
+//        pr_info("[SKY_CHG]%s: chg_current %d\n", __func__, chg_current);
+        pm_chg_imaxsel_set(chg_current);
+        saved_current = chg_current;
+}
+EXPORT_SYMBOL(pm8058_chg_set_current_temperature);
+#endif
 
 #define PM8058_CHG_VMAX_MIN  3300
 #define PM8058_CHG_VMAX_MAX  5500
@@ -637,6 +689,9 @@ static void pm8058_start_system_current(struct msm_hardware_charger *hw_chg,
 {
 	int ret = 0;
 
+	dev_info(pm8058_chg.dev, "%s %dmA, disable=%d\n",
+			__func__, max_current, pm8058_chg.disabled);
+
 	if (pm8058_chg.disabled)
 		return;
 
@@ -678,9 +733,13 @@ static int __pm8058_start_charging(int chg_current, int termination_current,
 	if (ret)
 		goto out;
 
+#ifdef CONFIG_SKY_CHARGING
+    save_current = chg_current;
+#else
 	ret = pm_chg_imaxsel_set(chg_current);
 	if (ret)
 		goto out;
+#endif
 
 	ret = pm_chg_failed_clear(1);
 	if (ret)
@@ -698,7 +757,12 @@ static int __pm8058_start_charging(int chg_current, int termination_current,
 	if (ret)
 		goto out;
 
+#ifdef CONFIG_SKY_CHARGING
+	ret = pm_chg_batt_temp_disable(1);
+#else
 	ret = pm_chg_batt_temp_disable(0);
+#endif
+
 	if (ret)
 		goto out;
 
@@ -787,6 +851,10 @@ static int pm8058_start_charging(struct msm_hardware_charger *hw_chg,
 	int vbat_higher_than_vbatdet;
 	int ret = 0;
 
+#ifdef CONFIG_SKY_CHARGING
+	dev_info(pm8058_chg.dev, "%s pm8058_start_charging : current %d \n", __func__,chg_current);
+#endif
+
 	cancel_delayed_work_sync(&pm8058_chg.charging_check_work);
 
 	/*
@@ -794,7 +862,11 @@ static int pm8058_start_charging(struct msm_hardware_charger *hw_chg,
 	 * to 450 and make sure we never cross it
 	 */
 	if (chg_current == 500)
+#ifdef CONFIG_SKY_CHARGING
+		chg_current = 400;
+#else
 		chg_current = 450;
+#endif
 
 	if (hw_chg->type == CHG_TYPE_AC && chg_data.max_source_current)
 		chg_current = chg_data.max_source_current;
@@ -848,6 +920,7 @@ static int pm8058_start_charging(struct msm_hardware_charger *hw_chg,
 			     (AUTO_CHARGING_VBATDET_DEBOUNCE_TIME_MS)));
 
 out:
+	dev_info(pm8058_chg.dev, "%s :out: ret=%d \n", __func__,ret);
 	return ret;
 }
 
@@ -1027,15 +1100,37 @@ static irqreturn_t pm8058_chg_chgstate_handler(int irq, void *dev_id)
 
 static irqreturn_t pm8058_chg_fastchg_handler(int irq, void *dev_id)
 {
+#ifdef CONFIG_SKY_CHARGING
+	int ret = 0;
+#endif
+
 	pm8058_chg_disable_irq(FASTCHG_IRQ);
 
 	/* we have begun the fast charging state */
 	dev_info(pm8058_chg.dev, "%s begin fast charging"
 		, __func__);
+
+#ifdef CONFIG_SKY_CHARGING
+        if(msm_charger_is_incall())
+                save_current = 400;
+
+	dev_info(pm8058_chg.dev, "[SKY CHG]%s begin fast charging, set current %d"
+		, __func__, save_current);
+        
+	ret = pm_chg_imaxsel_set(save_current);
+	if (ret)
+        {   
+                pr_err("fail to pm_chg_imaxsel_set\n");
+        }
+
+        start_fast_charging = 1;
+#endif
+
 	msm_charger_notify_event(&usb_hw_chg, CHG_BATT_BEGIN_FAST_CHARGING);
 	return IRQ_HANDLED;
 }
 
+#ifndef CONFIG_SKY_CHARGING
 static irqreturn_t pm8058_chg_batttemp_handler(int irq, void *dev_id)
 {
 	int ret;
@@ -1050,31 +1145,17 @@ static irqreturn_t pm8058_chg_batttemp_handler(int irq, void *dev_id)
 		/* read status to determine we are inrange or outofrange */
 		ret =
 		    pm_chg_get_rt_status(pm8058_chg.pmic_chg_irq[BATTTEMP_IRQ]);
-#if 0		
 		if (ret)
 			msm_charger_notify_event(&usb_hw_chg,
 						 CHG_BATT_TEMP_OUTOFRANGE);
 		else
 			msm_charger_notify_event(&usb_hw_chg,
 						 CHG_BATT_TEMP_INRANGE);
-#else
-		if (ret)
-		{
-			dev_info(pm8058_chg.dev, "%s [batt temp handler]CHG_BATT_TEMP_OUTOFRANGE\n", __func__);	
-			msm_charger_notify_event(&usb_hw_chg,
-						 CHG_BATT_TEMP_OUTOFRANGE);
-		}
-		else
-		{
-			dev_info(pm8058_chg.dev, "%s [batt temp handler]CHG_BATT_TEMP_INRANGE\n", __func__);	
-			msm_charger_notify_event(&usb_hw_chg,
-						 CHG_BATT_TEMP_INRANGE);
-		}
-#endif 
 	}
 
 	return IRQ_HANDLED;
 }
+#endif
 
 static irqreturn_t pm8058_chg_vbatdet_handler(int irq, void *dev_id)
 {
@@ -1158,22 +1239,25 @@ static irqreturn_t pm8058_chg_battconnect_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
 static irqreturn_t pm8058_chg_batt_id_changed_handler(int irq, void *dev_id)
 {
 	int ret;
 
 	ret = pm_chg_get_rt_status(pm8058_chg.pmic_chg_irq[BATTID_IRQ]);
 
+        pr_info("[SKY CHG]%s: batt_id_chanded is %d\n", __func__, ret);
+
 	if (ret) {
 		msm_charger_notify_event(&usb_hw_chg, CHG_BATT_REMOVED);
 	}
 
-		pm8058_chg_enable_irq(BATTID_IRQ);
-		
+//	pm8058_chg_disable_irq(BATTID_IRQ);
+    	pm8058_chg_enable_irq(BATTID_IRQ);
+    
 	return IRQ_HANDLED;
 }
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#endif
 
 static int get_rt_status(void *data, u64 * val)
 {
@@ -1326,6 +1410,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 		}
 	}
 
+#ifndef CONFIG_SKY_CHARGING
 	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ, "BATTTEMP");
 	if (res == NULL) {
 		dev_err(pm8058_chg.dev,
@@ -1345,6 +1430,7 @@ static int __devinit request_irqs(struct platform_device *pdev)
 			pm8058_chg_disable_irq(BATTTEMP_IRQ);
 		}
 	}
+#endif
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ,
 					   "BATT_REPLACE");
@@ -1405,7 +1491,8 @@ static int __devinit request_irqs(struct platform_device *pdev)
 			pm8058_chg_disable_irq(VBATDET_IRQ);
 		}
 	}
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
 	{
 		struct pm8xxx_mpp_config_data sky_batt_digital_adc = {
 			.type	= PM8XXX_MPP_TYPE_D_INPUT,
@@ -1420,19 +1507,20 @@ static int __devinit request_irqs(struct platform_device *pdev)
 			goto err_out;
         }
 	}	
-    
 	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ, "BATT_ID_CHANGED");
+
 	if (res == NULL) {
 		dev_err(pm8058_chg.dev,
 			"%s:couldnt find resource BATT_ID_CHANGED\n", __func__);
 		goto err_out;
 	} else {
-		ret = request_threaded_irq(res->start,NULL,
+		ret = request_threaded_irq(res->start, NULL,
 				  pm8058_chg_batt_id_changed_handler,
 				  IRQF_TRIGGER_RISING |IRQF_TRIGGER_FALLING,
 				  res->name, NULL);
+
 		if (ret < 0) {
-			dev_err(pm8058_chg.dev, "%s:couldnt request %d %d\n",
+			dev_err(pm8058_chg.dev, "%s:[BATT_ID_CHANGED] couldnt request %d %d\n",
 				__func__, res->start, ret);
 			goto err_out;
 		} else {
@@ -1441,7 +1529,8 @@ static int __devinit request_irqs(struct platform_device *pdev)
 			pm8058_chg_disable_irq(BATTID_IRQ);
 		}
 	}
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#endif
+
 	return 0;
 
 err_out:
@@ -1801,7 +1890,7 @@ static int batt_read_adc(int channel, int *mv_reading)
 
 	pr_debug("%s: called for %d\n", __func__, channel);
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
     if(channel == CHANNEL_ADC_BATT_ID)
     {
 		struct pm8xxx_mpp_config_data sky_batt_analog_adc = {
@@ -1812,12 +1901,16 @@ static int batt_read_adc(int channel, int *mv_reading)
 	
 		ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(7), &sky_batt_analog_adc);
 		
-       	if (ret)
-       		pr_err("%s: Config mpp8 on pmic 8058 failed\n", __func__);
+    	if (ret)
+    		pr_err("%s: Config mpp8 on pmic 8058 failed\n", __func__);
 
-            msleep(10);
+#ifdef CONFIG_SKY_CHARGING
+            msleep(1);
+#else
+                msleep(10);
+#endif
     }
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#endif
 
 	ret = adc_channel_open(channel, &h);
 	if (ret) {
@@ -1849,7 +1942,7 @@ static int batt_read_adc(int channel, int *mv_reading)
 
 	pr_debug("%s: done for %d\n", __func__, channel);
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
 	{
 		struct pm8xxx_mpp_config_data sky_batt_digital_adc = {
 			.type	= PM8XXX_MPP_TYPE_D_INPUT,
@@ -1864,7 +1957,7 @@ static int batt_read_adc(int channel, int *mv_reading)
 				__func__, ret);
 		}
 	}	
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#endif  //CONFIG_SKY_CHARGING
 
 	return adc_chan_result.physical;
 out:
@@ -1873,9 +1966,11 @@ out:
 
 }
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#ifdef CONFIG_SKY_CHARGING
+#define BATT_ID_OPEN_MV  500
+#elif defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
 #define BATT_ID_OPEN_MV  1300
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#endif
 
 #define BATT_THERM_OPEN_MV  2000
 static int pm8058_is_battery_present(void)
@@ -1883,46 +1978,37 @@ static int pm8058_is_battery_present(void)
 	int mv_reading;
 
 	mv_reading = 0;
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
 	batt_read_adc(CHANNEL_ADC_BATT_ID, &mv_reading);
 	pr_info("%s: batt_id is %d\n", __func__, mv_reading);
 	if (mv_reading < BATT_ID_OPEN_MV)
 		return 1;
-	else
-		 return 0;
-#else  //CONFIG_SKY_SMB136S_CHARGER
+#else
 	batt_read_adc(CHANNEL_ADC_BATT_THERM, &mv_reading);
 	pr_debug("%s: therm_raw is %d\n", __func__, mv_reading);
 	if (mv_reading > 0 && mv_reading < BATT_THERM_OPEN_MV)
 		return 1;
-	else
-		return 0;
-#endif  //CONFIG_SKY_SMB136S_CHARGER
-
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-        if(pm8058_is_factory_cable() == 1)
-        {
-                is_nobattery_with_factory_cable = 1;
-        }
-#endif  
+#endif
+	return 0;
 }
 
 static int pm8058_get_battery_temperature(void)
 {
+// P11220 130618 need_to_fix : batt temp ADC
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+	return 30;
+#else
 	return batt_read_adc(CHANNEL_ADC_BATT_THERM, NULL);
+#endif
 }
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-#define BATT_THERM_OPERATIONAL_MAX_CELCIUS 45
-#define BATT_THERM_OPERATIONAL_MIN_CELCIUS 0
-#else
 #define BATT_THERM_OPERATIONAL_MAX_CELCIUS 40
 #define BATT_THERM_OPERATIONAL_MIN_CELCIUS 0
-#endif 
 static int pm8058_is_battery_temp_within_range(void)
 {
-
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+// no battery temp
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
         return 1;
 #else
 	int therm_celcius;
@@ -1935,7 +2021,7 @@ static int pm8058_is_battery_temp_within_range(void)
 		return 1;
 
 	return 0;
-#endif	
+#endif
 }
 
 #define BATT_ID_MAX_MV  800
@@ -1943,34 +2029,50 @@ static int pm8058_is_battery_temp_within_range(void)
 static int pm8058_is_battery_id_valid(void)
 {
 	int batt_id_mv;
+#ifdef CONFIG_SKY_CHARGING
+	//int cable_id_mv;
+#endif
 
 	batt_id_mv = batt_read_adc(CHANNEL_ADC_BATT_ID, NULL);
+#ifdef CONFIG_SKY_CHARGING
+	dev_info(pm8058_chg.dev,"%s : CHANNEL_ADC_BATT_ID = %d",__func__,batt_id_mv);
 	pr_debug("%s: batt_id_mv is %d\n", __func__, batt_id_mv);
+#endif
 
 	/*
 	 * The readings are not in range
 	 * assume battery is present for now
 	 */
+#ifndef CONFIG_SKY_CHARGING
 	return 1;
+#endif
 
+#ifdef CONFIG_SKY_CHARGING
+	if (batt_id_mv < BATT_ID_OPEN_MV)
+		return 1;
+#else
 	if (batt_id_mv > 0
 		&& batt_id_mv > BATT_ID_MIN_MV
 		&& batt_id_mv < BATT_ID_MAX_MV)
 		return 1;
-
+#endif
 	return 0;
 }
 
 /* returns voltage in mV */
+#ifdef CONFIG_SKY_CHARGING
+extern int max17040_get_voltage(void);
+#endif
 static int pm8058_get_battery_mvolts(void)
 {
 	int vbatt_mv;
 
-#if defined(CONFIG_SKY_BATTERY_MAX17043)
-	vbatt_mv=max17040_get_voltage();
-#else  //CONFIG_SKY_BATTERY_MAX17043
+#ifdef CONFIG_SKY_CHARGING
+	//ps1 team shs : get volt value from fuel gague
+	vbatt_mv = max17040_get_voltage();
+#else
 	vbatt_mv = batt_read_adc(CHANNEL_ADC_VBATT, NULL);
-#endif //CONFIG_SKY_BATTERY_MAX17043
+#endif
 	pr_debug("%s: vbatt_mv is %d\n", __func__, vbatt_mv);
 	if (vbatt_mv > 0)
 		return vbatt_mv;
@@ -1981,29 +2083,92 @@ static int pm8058_get_battery_mvolts(void)
 	return 0;
 }
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-#define FACTORY_ID_MIN 2400      
-#define FACTORY_ID_MAX 4000  //default 2900
+
+#ifdef FEATURE_ICS_FACTORY_CABLE_ADC_CAL
+#define factory_cable_min 2500
+#define factory_cable_max 3800
 #endif
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-int pm8058_is_factory_cable(void)
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+int pm8058_get_battery_id(void)
+{
+	return batt_read_adc(CHANNEL_ADC_BATT_ID, NULL);
+}
+
+int pm8058_get_cable_id(void)
 {
 	int cable_mv;
 
 	cable_mv = batt_read_adc(CHANNEL_ADC_BATT_AMON, NULL);
-	if (cable_mv > FACTORY_ID_MIN && cable_mv < FACTORY_ID_MAX)
-        {   
-                pr_info("%s: %s\n", __func__, "this is factory cable");
-		return 1;
-        }
+	pr_info("%s: cable_mv = %d\n", __func__, cable_mv);
+	return cable_mv;
+}
+
+/*static*/ int pm8058_is_factory_cable(void)
+{
+	int cable_mv;
+
+	cable_mv = batt_read_adc(CHANNEL_ADC_BATT_AMON, NULL);
+	pr_info("%s: cable_mv is %d\n", __func__, cable_mv);
+#ifdef FEATURE_ICS_FACTORY_CABLE_ADC_CAL
+	if (cable_mv > factory_cable_min && cable_mv < factory_cable_max)
+#else
+	if (cable_mv > 900 && cable_mv < 1600)
+#endif
+	return 1;
 	/*
 	 * return 0 to tell the upper layers
 	 * we couldnt read the battery voltage
 	 */
-	return cable_mv;
+	return 0;
 }
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#endif
+
+#ifdef F_MHL_AUTO_CONNECT
+int pm8058_is_mhl_cable(void)
+{
+// paiksun...
+#if 0 // defined(CONFIG_MACH_MSM8X60_EF39S) && (BOARD_REV == WS20)
+	return 0;
+#else
+	int cable_mv;
+
+	cable_mv = batt_read_adc(CHANNEL_ADC_BATT_AMON, NULL);
+	pr_info("%s: cable_mv is pm8058_cable_check : %d\n", __func__, cable_mv);
+
+	if (cable_mv < 1000)  // 20110926, kkcho, for nomal margin-value 0V~0.1V from HW (50->500->1000)
+	{
+		pr_info("%s: [SKY-MHL]cable_mv is pm8058_is_mhl_cable : %d\n", __func__, cable_mv);
+		return 1;
+	}
+
+	return 0;
+#endif
+}
+
+EXPORT_SYMBOL(pm8058_is_mhl_cable);
+#endif
+
+#ifdef CONFIG_SKY_TDMB_MICRO_USB_DETECT
+int pm8058_is_dmb_ant(void)
+{
+	int cable_mv;
+
+	cable_mv = batt_read_adc(CHANNEL_ADC_BATT_AMON, NULL);
+	pr_info("%s: cable_mv is : %d\n", __func__, cable_mv);
+
+	//if (cable_mv > 4300 && cable_mv < 4900) // tdmb_ant ADC : 1.12v
+	if (cable_mv > 4000 && cable_mv < 5200) // EF39s tdmb_ant ADC : 1.12v
+	{
+		//pr_info("[%s]cable_mv is pm8058_is_dmb_ant : %d\n", __func__, cable_mv);
+		return 1;
+	}
+
+	return 0;
+}
+
+EXPORT_SYMBOL(pm8058_is_dmb_ant);
+#endif
 
 static int msm_battery_gauge_alarm_notify(struct notifier_block *nb,
 		unsigned long status, void *unused)
@@ -2061,8 +2226,13 @@ static struct msm_battery_gauge pm8058_batt_gauge = {
 	.is_battery_temp_within_range = pm8058_is_battery_temp_within_range,
 	.is_battery_id_valid = pm8058_is_battery_id_valid,
 	.monitor_for_recharging = pm8058_monitor_for_recharging,
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+	.get_battery_id = pm8058_get_battery_id,
 	.is_factory_cable = pm8058_is_factory_cable,
+	.get_cable_id = pm8058_get_cable_id,
+#endif
+#ifdef F_MHL_AUTO_CONNECT
+	.is_mhl_cable = pm8058_is_mhl_cable,
 #endif
 };
 
@@ -2114,7 +2284,7 @@ static int __devinit pm8058_charger_probe(struct platform_device *pdev)
 		goto free_irq;
 	}
 
-#if !defined(CONFIG_SKY_SMB136S_CHARGER)
+#if !(defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER))
 	rc = msm_charger_register(&usb_hw_chg);
 	if (rc) {
 		pr_err("%s: msm_charger_register failed ret=%d\n",
@@ -2123,11 +2293,16 @@ static int __devinit pm8058_charger_probe(struct platform_device *pdev)
 	}
 #endif
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+#if defined(CONFIG_SKY_CHARGING)
+	pm8058_chg.verylow_battery = -1;
+#endif
+
+// paiksun...
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
 	pm_chg_batt_temp_disable(1);
-#else  //CONFIG_SKY_SMB136S_CHARGER
+#else
 	pm_chg_batt_temp_disable(0);
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#endif
 	msm_battery_gauge_register(&pm8058_batt_gauge);
 	__dump_chg_regs();
 
@@ -2140,10 +2315,14 @@ static int __devinit pm8058_charger_probe(struct platform_device *pdev)
 	/* determine what state the charger is in */
 	pm8058_chg_determine_initial_state();
 
-#ifndef CONFIG_SKY_SMB136S_CHARGER
+#ifndef CONFIG_SKY_SMB136S_CHARGER				// kobj change def -> ndef 110901
 	pm8058_chg_enable_irq(BATTTEMP_IRQ);
 #endif
 	pm8058_chg_enable_irq(BATTCONNECT_IRQ);
+
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+	pm8058_chg_enable_irq(BATTID_IRQ);
+#endif
 
 	rc = pm8xxx_batt_alarm_disable(PM8XXX_BATT_ALARM_UPPER_COMPARATOR);
 	if (!rc)
@@ -2187,10 +2366,6 @@ static int __devinit pm8058_charger_probe(struct platform_device *pdev)
 		pr_err("%s: unable to register alarm notifier\n", __func__);
 		goto free_irq;
 	}
-
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-	pm8058_chg_enable_irq(BATTID_IRQ);
-#endif  //CONFIG_SKY_SMB136S_CHARGER
 
 	pm8058_chg.inited = 1;
 

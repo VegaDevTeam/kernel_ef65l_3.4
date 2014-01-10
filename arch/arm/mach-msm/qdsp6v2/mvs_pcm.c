@@ -35,7 +35,9 @@
 #include "audio_fileio.h"
 #endif
 
-//jhpark-MVS #define MVS_PCM_RX_SCALE_ENABLE     // 110520 SangwonLee Input data scaling.
+#ifndef CONFIG_SKY_SND_MVS
+#define MVS_PCM_RX_SCALE_ENABLE     // 110520 SangwonLee Input data scaling.
+#endif
 /************************************************************************************************
 ** Defines
 *************************************************************************************************/
@@ -237,6 +239,7 @@ static long mvs_pcm_ioctl(struct file *file, unsigned int cmd, unsigned long arg
        return 0;
 }
 
+#if 0 //def CONFIG_SKY_SND_MVS
 static const struct file_operations mvs_pcm_fops = {
 	.owner		= THIS_MODULE,
        .read = mvs_pcm_read,
@@ -251,6 +254,24 @@ struct miscdevice mvs_pcm_miscdev = {
 	.name =     "smd_mvs",
 	.fops =     &mvs_pcm_fops
 };
+
+#elif defined (CONFIG_SKY_SND_MVS/*CONFIG_SKYSND_CTRL*/)
+
+static struct file_operations mvs_pcm_fops = {
+	.owner		= THIS_MODULE,
+       .read = mvs_pcm_read,
+       .write = mvs_pcm_write,
+	.open		= mvs_pcm_open,
+	.release	= mvs_pcm_release,
+	.unlocked_ioctl	= mvs_pcm_ioctl,
+};
+
+static struct miscdevice mvs_pcm_miscdev = {
+	.minor =    MISC_DYNAMIC_MINOR,
+	.name =     "smd_mvs",
+	.fops =     &mvs_pcm_fops
+};
+#endif
 
 static int __init mvs_pcm_misc_device_init(void)
 {

@@ -21,8 +21,13 @@
 ** Message Definition
 *************************************************************************************************/
 //#define MVS_PCM_MSG_LEVEL_LOW
+#ifdef CONFIG_SKY_SND_MVS
+//#define MVS_PCM_MSG_LEVEL_MED
+//#define MVS_PCM_MSG_LEVEL_HIGH
+#else
 #define MVS_PCM_MSG_LEVEL_MED
 #define MVS_PCM_MSG_LEVEL_HIGH
+#endif
 
 #ifdef MVS_PCM_MSG_LEVEL_LOW
 #define MVS_PCM_DBG_LOW(fmt, arg...) printk(KERN_INFO "%s: " fmt "\n", __func__, ## arg)

@@ -762,6 +762,7 @@ struct common_data {
 int voice_set_voc_path_full_reset(void);
 #endif
 
+
 int voice_set_voc_path_full(uint32_t set);
 
 void voice_register_mvs_cb(ul_cb_fn ul_cb,
@@ -779,4 +780,11 @@ int voice_start_record(uint32_t rec_mode, uint32_t set);
 int voice_start_playback(uint32_t set);
 
 u16 voice_get_session_id(const char *name);
+
+#ifdef CONFIG_SKYSND_CTRL   // SUPPORT_VARIABLE_RATE
+int voice_set_voc_path_full_reset(void);
+uint32_t voice_get_config_vocoder_rate(void);
+void voice_set_config_vocoder_rate(uint32_t rate);
+#endif
+
 #endif

@@ -300,7 +300,7 @@ int sdio_cmux_open(const int id,
 	}
 	logical_ch[id].is_local_open = 1;
 	logical_ch[id].priv = priv;
-	logical_ch[id].receive_cb = receive_cb;
+	logical_ch[id].receive_cb = receive_cb;	// for poor throughput issue. roll-back ICS
 	logical_ch[id].write_done = write_done;
 	logical_ch[id].status_callback = status_callback;
 	if (logical_ch[id].receive_cb) {
@@ -338,12 +338,10 @@ int sdio_cmux_close(int id)
 
 	ch = &logical_ch[id];
 	mutex_lock(&ch->lc_lock);
-	ch->receive_cb = NULL;
-	mutex_lock(&ch->tx_lock);
-	ch->write_done = NULL;
-	mutex_unlock(&ch->tx_lock);
-	ch->is_local_open = 0;
+	ch->is_local_open = 0;		// for poor throughput issue. roll-back ICS
 	ch->priv = NULL;
+	ch->receive_cb = NULL;
+	ch->write_done = NULL;
 	mutex_unlock(&ch->lc_lock);
 	sdio_cmux_write_cmd(ch->lc_id, CLOSE);
 	return 0;
@@ -561,7 +559,7 @@ static int process_cmux_pkt(void *pkt, int size)
 			       "receiving OPEN command\n", __func__, id);
 			return -ENODEV;
 		}
-
+		// for poor throughput issue. roll-back ICS
 		data = (void *)((char *)pkt + sizeof(struct sdio_cmux_hdr));
 		data_size = (int)(((struct sdio_cmux_hdr *)pkt)->pkt_len);
 		if (logical_ch[id].receive_cb)
@@ -596,7 +594,12 @@ static void parse_cmux_data(void *data, int size)
 
 	D("Entered %s\n", __func__);
 	temp_ptr = (char *)data;
-	while (data_parsed < size) {
+	while (data_parsed < size) {	
+		if(((struct sdio_cmux_hdr *)temp_ptr)->magic_no != MAGIC_NO_V1) {
+			pr_err("%s: invalid pkt at %p, data_parsed = %d, size = %d\n", __func__, temp_ptr, data_parsed, size);
+			break;
+		}
+				 
 		pkt_size = sizeof(struct sdio_cmux_hdr) +
 			   (int)(((struct sdio_cmux_hdr *)temp_ptr)->pkt_len);
 		D("Parsed %d bytes, Current Pkt Size %d bytes,"

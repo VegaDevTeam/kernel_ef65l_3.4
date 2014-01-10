@@ -32,10 +32,23 @@
 #include <mach/clk.h>
 #include <mach/msm_xo.h>
 
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244 // MHL_KKCHO
+//#define MHL_AUTH_TEST
+#define F_MHL_AUTO_CONNECT
+#endif
+
+#ifdef F_MHL_AUTO_CONNECT
+extern void MHL_Set_cable_detect_handler(void);
+extern uint32_t MHL_Get_Cable_State(void);
+
+#define MHL_CABLE_CONNCET			1
+#define MHL_CABLE_DISCONNCET	       0
+#endif
+
 #define MSM_USB_BASE	(dev->regs)
 #define USB_LINK_RESET_TIMEOUT	(msecs_to_jiffies(10))
 #define DRIVER_NAME	"msm_otg"
-#define FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
+
 static void otg_reset(struct usb_phy *phy, int phy_reset);
 static void msm_otg_set_vbus_state(int online);
 #ifdef CONFIG_USB_EHCI_MSM_72K
@@ -47,15 +60,6 @@ static void msm_otg_set_id_state(int id)
 #endif
 
 struct msm_otg *the_msm_otg;
-#ifdef FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
-enum chg_type pantech_get_otg_chg_type(void)
-{	
-	struct msm_otg *dev = the_msm_otg;
-	if(dev)		
-		return atomic_read(&dev->chg_type);
-
-	return USB_CHG_TYPE__INVALID;}
-#endif/*FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG*/
 
 static int is_host(void)
 {
@@ -546,11 +550,17 @@ static int msm_otg_set_power(struct usb_phy *xceiv, unsigned mA)
 				test_bit(ID_B, &dev->inputs))
 		charge = USB_IDCHG_MAX;
 
+#ifdef CONFIG_SKY_CHARGING
+	pr_info("[SKY CHG]Charging with %dmA current, charge_type %d\n", charge,new_chg);
+#else
 	pr_debug("Charging with %dmA current\n", charge);
+#endif
+
 	/* Call vbus_draw only if the charger is of known type and also
 	 * ignore request to stop charging as a result of suspend interrupt
 	 * when wall-charger is used.
 	 */
+
 	if (pdata->chg_vbus_draw && new_chg != USB_CHG_TYPE__INVALID &&
 		(charge || new_chg != USB_CHG_TYPE__WALLCHARGER))
 			pdata->chg_vbus_draw(charge);
@@ -815,6 +825,14 @@ static int msm_otg_suspend(struct msm_otg *dev)
 		dev->pdata->config_vddcx(0);
 	pr_info("%s: usb in low power mode\n", __func__);
 
+#ifdef F_MHL_AUTO_CONNECT
+	if(MHL_Get_Cable_State() == 1)
+	{
+		MHL_Set_cable_detect_handler();
+		printk(KERN_ERR "[SKY_MHL]%s MHL cable disconnect OK!\n",__func__);
+	}
+#endif
+
 out:
 	enable_irq(dev->irq);
 
@@ -866,6 +884,14 @@ static int msm_otg_resume(struct msm_otg *dev)
 	atomic_set(&dev->in_lpm, 0);
 
 	pr_info("%s: usb exited from low power mode\n", __func__);
+
+#ifdef MHL_AUTH_TEST
+    if(MHL_Get_Cable_State() == 0)
+    {
+    	MHL_Set_cable_detect_handler();
+    	printk(KERN_ERR "[SKY_MHL]%s MHL cable Connect \n",__func__);	
+    }
+#endif
 
 	return 0;
 }
@@ -1239,7 +1265,11 @@ void msm_otg_set_vbus_state(int online)
 static irqreturn_t msm_otg_irq(int irq, void *data)
 {
 	struct msm_otg *dev = data;
-	u32 otgsc, sts, pc, sts_mask;
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits --->>>
+	//u32 otgsc, sts, pc, sts_mask;
+	u32 otgsc, sts, pc;
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits ---<<<	
+
 	irqreturn_t ret = IRQ_HANDLED;
 	int work = 0;
 	enum usb_otg_state state;
@@ -1260,12 +1290,25 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 	otgsc = readl(USB_OTGSC);
 	sts = readl(USB_USBSTS);
 
-	sts_mask = (otgsc & OTGSC_INTR_MASK) >> 8;
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits --->>>
+	//sts_mask = (otgsc & OTGSC_INTR_MASK) >> 8;
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits ---<<<	
 
-	if (!((otgsc & sts_mask) || (sts & STS_PCI))) {
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits --->>>
+	//if (!((otgsc & sts_mask) || (sts & STS_PCI))) {
+	/* At times during USB disconnect, hardware generates 1MSIS interrupt
+	 * during PHY reset, which leads to irq not handled error as IRQ_NONE
+	 * is notified. To workaround this issue, check for all the
+	 * OTG_INTR_STS_MASK bits and if set, clear them and notify IRQ_HANDLED.
+	 */
+	 if (!((otgsc & OTGSC_INTR_STS_MASK) || (sts & STS_PCI))) {
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits ---<<<	 	
 		ret = IRQ_NONE;
 		goto out;
 	}
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits --->>>
+	writel_relaxed(otgsc, USB_OTGSC);
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits ---<<<
 
 	spin_lock_irqsave(&dev->lock, flags);
 	state = dev->phy.state;
@@ -1287,10 +1330,14 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 			set_bit(A_BUS_REQ, &dev->inputs);
 			clear_bit(ID, &dev->inputs);
 		}
-		writel(otgsc, USB_OTGSC);
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits --->>>		
+		//writel(otgsc, USB_OTGSC);
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits ---<<<		
 		work = 1;
 	} else if (otgsc & OTGSC_BSVIS) {
-		writel(otgsc, USB_OTGSC);
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits --->>>	
+		//writel(otgsc, USB_OTGSC);
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits ---<<<		
 		/* BSV interrupt comes when operating as an A-device
 		 * (VBUS on/off).
 		 * But, handle BSV when charger is removed from ACA in ID_A
@@ -1308,7 +1355,9 @@ static irqreturn_t msm_otg_irq(int irq, void *data)
 		work = 1;
 	} else if (otgsc & OTGSC_DPIS) {
 		pr_debug("DPIS detected\n");
-		writel(otgsc, USB_OTGSC);
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits --->>>		
+		//writel(otgsc, USB_OTGSC);
+// P13120, [PATCH] USB: msm72k_otg: Handle clearing all otg interrupt status bits ---<<<		
 		set_bit(A_SRP_DET, &dev->inputs);
 		set_bit(A_BUS_REQ, &dev->inputs);
 		work = 1;
@@ -1807,6 +1856,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 		}
 		break;
 	case OTG_STATE_B_PERIPHERAL:
+
 		if (!test_bit(ID, &dev->inputs) ||
 				test_bit(ID_A, &dev->inputs) ||
 				test_bit(ID_B, &dev->inputs) ||

@@ -79,16 +79,6 @@ struct pantech_obex_dev
 	unsigned bound;
 };
 
-#if defined(FEATURE_ANDROID_PANTECH_USB_IAD)
-struct usb_interface_assoc_descriptor pantech_obex_interface_assoc_desc = {
-	.bLength           = sizeof pantech_obex_interface_assoc_desc,
-	.bDescriptorType   = USB_DT_INTERFACE_ASSOCIATION,
-	.bInterfaceCount   = 2,
-	.bFunctionClass =	0x02,
-	.bFunctionSubClass =	0x0B,
-	.bFunctionProtocol =	0x00,
-};
-#endif
 
 static struct usb_interface_descriptor pantech_obex_cdc_intf_desc = {
 	.bLength =		sizeof pantech_obex_cdc_intf_desc,
@@ -144,20 +134,13 @@ static struct usb_endpoint_descriptor pantech_obex_fs_bulk_out_desc = {
 };
 
 static struct usb_descriptor_header *pantech_fs_obex_descs[] = {
-#if defined(FEATURE_ANDROID_PANTECH_USB_IAD)
-  (struct usb_descriptor_header *) &pantech_obex_interface_assoc_desc,
-#endif
   (struct usb_descriptor_header *) &pantech_obex_cdc_intf_desc,
   (struct usb_descriptor_header *) &pantech_obex_data_intf_desc,
   (struct usb_descriptor_header *) &pantech_obex_fs_bulk_in_desc,
   (struct usb_descriptor_header *) &pantech_obex_fs_bulk_out_desc,
   NULL,
 };
-
 static struct usb_descriptor_header *pantech_hs_obex_descs[] = {
-#if defined(FEATURE_ANDROID_PANTECH_USB_IAD)
-  (struct usb_descriptor_header *) &pantech_obex_interface_assoc_desc,
-#endif
   (struct usb_descriptor_header *) &pantech_obex_cdc_intf_desc,
   (struct usb_descriptor_header *) &pantech_obex_data_intf_desc,
   (struct usb_descriptor_header *) &pantech_obex_hs_bulk_in_desc,
@@ -691,10 +674,6 @@ static int pantech_obex_function_bind(struct usb_configuration *c, struct usb_fu
     return id;
   pantech_obex_cdc_intf_desc.bInterfaceNumber = id;
 
-#if defined(FEATURE_ANDROID_PANTECH_USB_IAD)
-	pantech_obex_interface_assoc_desc.bFirstInterface = id;
-#endif
-
   id = usb_interface_id(c, f);
   if (id < 0)
     return id;
@@ -759,24 +738,49 @@ static int pantech_obex_function_set_alt(struct usb_function *f, unsigned intf, 
   int ret;
 
   //DBG(cdev, "pantech_obex_function_set_alt intf: %d alt: %d\n", intf, alt);
-	ret = config_ep_by_speed(cdev->gadget, f, dev->ep_in);
+#if 0
+  ret = usb_ep_enable(dev->ep_in,
+      ep_choose(cdev->gadget,
+        &pantech_obex_hs_bulk_in_desc,
+        &pantech_obex_fs_bulk_in_desc));
   if (ret)
     return ret;
-	
-  ret = usb_ep_enable(dev->ep_in);
-  if (ret)
-    return ret;
-
-	ret = config_ep_by_speed(cdev->gadget, f, dev->ep_out);
-  if (ret){
-		usb_ep_disable(dev->ep_in);
-    return ret;
-	}
-  ret = usb_ep_enable(dev->ep_out);
+  ret = usb_ep_enable(dev->ep_out,
+      ep_choose(cdev->gadget,
+        &pantech_obex_hs_bulk_out_desc,
+        &pantech_obex_fs_bulk_out_desc));
   if (ret) {
     usb_ep_disable(dev->ep_in);
     return ret;
   }
+#else
+	ret = config_ep_by_speed(cdev->gadget, f, dev->ep_in);
+	if (ret){
+		dev->ep_in->desc = NULL;
+//		ERROR(cdev, "config_ep_by_speed failes for ep %s, result %d\n",	dev->ep_in->name, ret);
+		return ret;		
+	}
+	ret = usb_ep_enable(dev->ep_in);
+	if(ret){
+//		ERROR(cdev, "failed to enable ep %s, result %d\n", dev->ep_in->name, ret);
+		return ret;
+	}
+
+	ret = config_ep_by_speed(cdev->gadget, f, dev->ep_out);
+	if (ret){
+		dev->ep_out->desc = NULL;
+//		ERROR(cdev, "config_ep_by_speed failes for ep %s, result %d\n", dev->ep_out->name, ret);
+		usb_ep_disable(dev->ep_in);
+		return ret;		
+	}
+	ret = usb_ep_enable(dev->ep_out);
+	if(ret){
+//		ERROR(cdev, "failed to enable ep %s, result %d\n", dev->ep_out->name, ret);
+		usb_ep_disable(dev->ep_in);						
+		return ret;
+	}
+#endif
+	
   dev->online = 1;
 
   /* readers may be blocked waiting for us to go online */

@@ -143,9 +143,15 @@ static struct usb_interface_descriptor rmnet_sdio_interface_desc = {
 	.bDescriptorType =      USB_DT_INTERFACE,
 	/* .bInterfaceNumber = DYNAMIC */
 	.bNumEndpoints =        3,
+#ifdef CONFIG_PANTECH_ANDROID_USB
+	.bInterfaceClass =	USB_CLASS_VENDOR_SPEC,
+	.bInterfaceSubClass =	0xF0,
+	.bInterfaceProtocol =	0x00,
+#else
 	.bInterfaceClass =      USB_CLASS_VENDOR_SPEC,
 	.bInterfaceSubClass =   USB_CLASS_VENDOR_SPEC,
 	.bInterfaceProtocol =   USB_CLASS_VENDOR_SPEC,
+#endif	
 	/* .iInterface = DYNAMIC */
 };
 

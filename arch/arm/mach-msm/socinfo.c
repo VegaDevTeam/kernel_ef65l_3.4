@@ -22,6 +22,10 @@
 
 #include "smd_private.h"
 
+#ifdef CONFIG_PANTECH_RESET_REASON
+#include "sky_sys_reset.h"
+#endif
+
 #define BUILD_ID_LENGTH 32
 
 enum {
@@ -725,6 +729,12 @@ static void * __init setup_dummy_socinfo(void)
 
 int __init socinfo_init(void)
 {
+#ifdef CONFIG_PANTECH_RESET_REASON
+	printk(KERN_NOTICE "[%s] sky reset init info\n",__func__);
+	sky_reset_reason = SYS_RESET_REASON_ABNORMAL;
+	sky_sys_rst_init_reboot_info();
+#endif
+
 	socinfo = smem_alloc(SMEM_HW_SW_BUILD_ID, sizeof(struct socinfo_v7));
 
 	if (!socinfo)

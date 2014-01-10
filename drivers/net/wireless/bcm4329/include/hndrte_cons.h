@@ -21,12 +21,21 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: hndrte_cons.h,v 13.1.2.4 2010/07/15 19:06:11 Exp $
+ * $Id: hndrte_cons.h,v 13.1.2.2.106.1 2010/07/15 19:58:23 Exp $
  */
 
 #include <typedefs.h>
 
+#ifdef RWL_DONGLE
+/* For Dongle uart tranport max cmd len is 256 bytes + header length (16 bytes)
+ *  In case of ASD commands we are not sure about how much is the command size
+ *  To be on the safe side, input buf len CBUF_LEN is increased to max (512) bytes.
+ */
+#define RWL_MAX_DATA_LEN	(512 + 8)	/* allow some extra bytes for '/n' termination */
+#define CBUF_LEN	(RWL_MAX_DATA_LEN + 64)  /* allow 64 bytes for header ("rwl...") */
+#else
 #define CBUF_LEN	(128)
+#endif
 
 #define LOG_BUF_LEN	1024
 

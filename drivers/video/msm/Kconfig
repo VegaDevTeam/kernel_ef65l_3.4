@@ -23,7 +23,7 @@ config FB_MSM_BACKLIGHT
 
 config FB_MSM_LOGO
 	bool "MSM Frame Buffer Logo"
-	default n
+	default y 
 	---help---
 	  Show /initlogo.rle during boot.
 
@@ -77,7 +77,7 @@ config FB_MSM_MDP31
 	  Say Y here if this is msm8x50 variant platform.
 
 config FB_MSM_MDP40
-	select FB_MSM_LCDC_HW
+	#select FB_MSM_LCDC_HW
 	select FB_MSM_MDP_HW
 	bool "MDP HW ver4.0"
 	---help---
@@ -174,10 +174,20 @@ config FB_MSM_LCDC_PANEL
 	select FB_MSM_LCDC
 	default n
 
-config FB_MSM_MIPI_DSI_SONY
+config FB_MSM_MIPI_DSI_MAGNA
 	bool
 	select FB_MSM_MIPI_DSI
 	default n
+
+config FB_MSM_MIPI_DSI_SONY
+    bool
+    select FB_MSM_MIPI_DSI
+    default n
+
+config FB_MSM_MIPI_DSI_SAMSUNG
+    bool
+    select FB_MSM_MIPI_DSI
+    default n
 
 config FB_MSM_MIPI_DSI_TOSHIBA
 	bool
@@ -243,11 +253,6 @@ config FB_MSM_LCDC_PRISM_WVGA
 	select FB_MSM_LCDC_PANEL
 	default n
 
-config FB_MSM_MIPI_SONY_VIDEO_WXGA
-	bool
-	select FB_MSM_MIPI_DSI_SONY
-	default n
-
 config FB_MSM_LCDC_SAMSUNG_WSVGA
 	bool
 	select FB_MSM_LCDC_PANEL
@@ -310,6 +315,21 @@ config FB_MSM_LCDC_NT35582_WVGA
 config FB_MSM_LCDC_WXGA
 	bool
 	select FB_MSM_LCDC_PANEL
+	default n
+	
+config FB_MSM_MIPI_MAGNA_VIDEO_WVGA
+	bool
+	select FB_MSM_MIPI_DSI_MAGNA
+	default n
+
+config FB_MSM_MIPI_SONY_VIDEO_WXGA
+	bool
+	select FB_MSM_MIPI_DSI_SONY
+	default n
+
+config FB_MSM_MIPI_SAMSUNG_VIDEO_WXGA
+	bool
+	select FB_MSM_MIPI_DSI_SAMSUNG
 	default n
 
 config FB_MSM_LVDS_CHIMEI_WXGA
@@ -550,6 +570,9 @@ config FB_MSM_TRY_MDDI_CATCH_LCDC_PRISM
 
 config FB_MSM_MIPI_PANEL_DETECT
 	bool "MIPI Panel Detect"
+	select FB_MSM_MIPI_MAGNA_VIDEO_WVGA
+	select FB_MSM_MIPI_SONY_VIDEO_WXGA
+	select FB_MSM_MIPI_SAMSUNG_VIDEO_WXGA
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WSVGA_PT
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WUXGA
@@ -594,6 +617,9 @@ config FB_MSM_LCDC_MIPI_PANEL_AUTO_DETECT
 	select FB_MSM_LCDC_SAMSUNG_OLED_PT
 	select FB_MSM_LCDC_NT35582_WVGA
 	select FB_MSM_LCDC_TOSHIBA_FWVGA_PT
+	select FB_MSM_MIPI_MAGNA_VIDEO_WVGA
+	select FB_MSM_MIPI_SONY_VIDEO_WXGA
+	select FB_MSM_MIPI_SAMSUNG_VIDEO_WXGA
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WSVGA_PT
 	select FB_MSM_MIPI_RENESAS_VIDEO_FWVGA_PT
@@ -660,10 +686,17 @@ config FB_MSM_MDDI_SHARP_QVGA_128x128
 	---help---
 	  Support for MDDI Sharp QVGA (240x320) and 128x128 dual panel
 
+config FB_MSM_MIPI_MAGNA_VIDEO_WVGA_PANEL
+	bool "MIPI Magna WVGA Panel"
+	select FB_MSM_MIPI_MAGNA_VIDEO_WVGA
+
 config FB_MSM_MIPI_SONY_VIDEO_WXGA_PANEL
 	bool "MIPI Sony WXGA Panel"
 	select FB_MSM_MIPI_SONY_VIDEO_WXGA
 
+config FB_MSM_MIPI_SAMSUNG_VIDEO_WXGA_PANEL
+	bool "MIPI Samsung WXGA Panel"
+	select FB_MSM_MIPI_SAMSUNG_VIDEO_WXGA
 
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT_PANEL
 	bool "MIPI Toshiba WVGA PT Panel"

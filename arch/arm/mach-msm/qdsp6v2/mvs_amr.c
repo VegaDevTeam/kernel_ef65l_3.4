@@ -196,8 +196,6 @@ static ssize_t mvs_amr_write(struct file *file,
     mutex_unlock(&mvs_amr_rx_buf_lock);
     return rc;
 }
-
-
 static int mvs_amr_open(struct inode *inode, struct file *file)
 {
        MVS_AMR_DBG_LOW("mvs_amr_open");
@@ -207,7 +205,7 @@ static int mvs_amr_open(struct inode *inode, struct file *file)
 static int mvs_amr_release(struct inode *inode, struct file *file)
 {
 	MVS_AMR_DBG_LOW("mvs_amr_release ");
-#ifdef MVS_AMR_DUMP     
+#ifdef MVS_AMR_DUMP    
        enable_dump=0;
 #endif
 	return 0;	
@@ -219,6 +217,7 @@ static long mvs_amr_ioctl(struct file *file, unsigned int cmd, unsigned long arg
        return 0;
 }
 
+#if 0 //def CONFIG_SKY_SND_MVS
 static const struct file_operations mvs_amr_fops = {
 	.owner		= THIS_MODULE,
        .read = mvs_amr_read,
@@ -234,7 +233,23 @@ struct miscdevice mvs_amr_miscdev = {
 	.fops =     &mvs_amr_fops
 };
 
- 
+#elif defined (CONFIG_SKY_SND_MVS/*CONFIG_SKYSND_CTRL*/)
+static struct file_operations mvs_amr_fops = {
+	.owner		= THIS_MODULE,
+       .read = mvs_amr_read,
+       .write = mvs_amr_write,
+	.open		= mvs_amr_open,
+	.release	= mvs_amr_release,
+	.unlocked_ioctl	= mvs_amr_ioctl,
+};
+
+static struct miscdevice mvs_amr_miscdev = {
+	.minor =    MISC_DYNAMIC_MINOR,
+	.name =     "mvs_amr",
+	.fops =     &mvs_amr_fops
+};
+#endif
+
 static int __init mvs_amr_misc_device_init(void)
 {
     int rc=0;

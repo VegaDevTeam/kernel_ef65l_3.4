@@ -70,12 +70,6 @@
  */
 static inline int usb_gadget_controller_number(struct usb_gadget *gadget)
 {
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-extern int b_support_ms_os_descriptor;
-	if (b_support_ms_os_descriptor)
-		return 0x90;
-	else
-#endif
 	if (gadget_is_net2280(gadget))
 		return 0x01;
 	else if (gadget_is_dummy(gadget))

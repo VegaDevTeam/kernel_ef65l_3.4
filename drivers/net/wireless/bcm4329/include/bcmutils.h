@@ -20,7 +20,7 @@
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
- * $Id: bcmutils.h,v 13.184.4.6.2.1.18.25 2010/04/26 06:05:24 Exp $
+ * $Id: bcmutils.h,v 13.184.4.6.2.1.18.15.2.19.2.3 2010/06/30 03:10:09 Exp $
  */
 
 
@@ -343,7 +343,9 @@ extern int bcm_iovar_lencheck(const bcm_iovar_t *table, void *arg, int len, bool
 #define BCME_RXFAIL			-39	
 #define BCME_NODEVICE			-40	
 #define BCME_UNFINISHED			-41	
-#define BCME_LAST			BCME_UNFINISHED
+#define BCME_NONRESIDENT		-42	
+#define BCME_DISABLED			-43	
+#define BCME_LAST			BCME_DISABLED
 
 
 #define BCMERRSTRINGTABLE {		\
@@ -389,6 +391,8 @@ extern int bcm_iovar_lencheck(const bcm_iovar_t *table, void *arg, int len, bool
 	"RX Failure",			\
 	"Device Not Present",		\
 	"Command not finished",		\
+	"Nonresident overlay access", \
+	"Disabled in this build" \
 }
 
 #ifndef ABS
@@ -556,10 +560,10 @@ xor_128bit_block(const uint8 *src1, const uint8 *src2, uint8 *dst)
 	    (((uintptr)src1 | (uintptr)src2 | (uintptr)dst) & 3) == 0) {
 		
 		
-		((uint32 *)dst)[0] = ((uint32 *)src1)[0] ^ ((uint32 *)src2)[0];
-		((uint32 *)dst)[1] = ((uint32 *)src1)[1] ^ ((uint32 *)src2)[1];
-		((uint32 *)dst)[2] = ((uint32 *)src1)[2] ^ ((uint32 *)src2)[2];
-		((uint32 *)dst)[3] = ((uint32 *)src1)[3] ^ ((uint32 *)src2)[3];
+		((uint32 *)dst)[0] = ((const uint32 *)src1)[0] ^ ((const uint32 *)src2)[0];
+		((uint32 *)dst)[1] = ((const uint32 *)src1)[1] ^ ((const uint32 *)src2)[1];
+		((uint32 *)dst)[2] = ((const uint32 *)src1)[2] ^ ((const uint32 *)src2)[2];
+		((uint32 *)dst)[3] = ((const uint32 *)src1)[3] ^ ((const uint32 *)src2)[3];
 	} else {
 		
 		int k;
@@ -578,10 +582,11 @@ extern uint32 hndcrc32(uint8 *p, uint nbytes, uint32 crc);
 	defined(WLMSG_ASSOC)
 extern int bcm_format_flags(const bcm_bit_desc_t *bd, uint32 flags, char* buf, int len);
 extern int bcm_format_hex(char *str, const void *bytes, int len);
-extern void prhex(const char *msg, uchar *buf, uint len);
 #endif 
+extern const char *bcm_crypto_algo_name(uint algo);
 extern char *bcm_brev_str(uint32 brev, char *buf);
 extern void printbig(char *buf);
+extern void prhex(const char *msg, uchar *buf, uint len);
 
 
 extern bcm_tlv_t *bcm_next_tlv(bcm_tlv_t *elt, int *buflen);
@@ -622,10 +627,7 @@ extern uint bcmdumpfields(bcmutl_rdreg_rtn func_ptr, void *arg0, uint arg1, stru
 extern uint bcm_mkiovar(char *name, char *data, uint datalen, char *buf, uint len);
 extern uint bcm_bitcount(uint8 *bitmap, uint bytelength);
 
-#if defined(WLTINYDUMP) || defined(WLMSG_INFORM) || defined(WLMSG_ASSOC) || \
-	defined(WLMSG_PRPKT) || defined(WLMSG_WSEC)
 extern int bcm_format_ssid(char* buf, const uchar ssid[], uint ssid_len);
-#endif 
 
 
 #define SSID_FMT_BUF_LEN	((4 * DOT11_MAX_SSID_LEN) + 1)

@@ -60,6 +60,11 @@ static const char driver_name[] = "msm72k_udc";
 
 #define SETUP_BUF_SIZE     8
 
+#define FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
+
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40S)
+#define FEATURE_MDM_APK_UMS_CTL
+#endif
 
 static const char *const ep_name[] = {
 	"ep0out", "ep1out", "ep2out", "ep3out",
@@ -74,6 +79,12 @@ static const char *const ep_name[] = {
 
 /*To release the wakelock from debugfs*/
 static int release_wlocks;
+
+#ifdef FEATURE_MDM_APK_UMS_CTL
+extern bool get_pantech_mdm_state(void);
+extern void pantech_usb_gadget_connect(void);
+extern void pantech_usb_gadget_disconnect(void);
+#endif
 
 struct msm_request {
 	struct usb_request req;
@@ -238,6 +249,19 @@ static void flush_endpoint(struct msm_endpoint *ept);
 static void usb_reset(struct usb_info *ui);
 static int usb_ept_set_halt(struct usb_ep *_ep, int value);
 
+#ifdef FEATURE_MDM_APK_UMS_CTL
+void pantech_pullup_internal_control(int value)
+{
+    struct usb_info *ui = the_usb_info;
+
+    if(!ui){
+	printk("pantech_pullup_internal_control return!\n");
+    }
+
+    msm72k_pullup_internal(&ui->gadget, value);
+}
+#endif
+
 static void msm_hsusb_set_speed(struct usb_info *ui)
 {
 	unsigned long flags;
@@ -281,14 +305,6 @@ static enum usb_device_state msm_hsusb_get_state(void)
 	return state;
 }
 
-// choi -->
-int get_udc_state(void)
-{
-	return the_usb_info->sdev.state;
-}
-EXPORT_SYMBOL(get_udc_state);
-// choi --<
-
 static ssize_t print_switch_name(struct switch_dev *sdev, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%s\n", DRIVER_NAME);
@@ -300,6 +316,31 @@ static ssize_t print_switch_state(struct switch_dev *sdev, char *buf)
 		sdev->state ? "online" : "offline");
 }
 
+#ifdef FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
+inline enum chg_type pantech_usb_get_chg_type(void)
+{
+	struct usb_info *ui = the_usb_info;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ui->lock, flags);
+	if ((readl_relaxed(USB_PORTSC) & PORTSC_LS) == PORTSC_LS) {
+		spin_unlock_irqrestore(&ui->lock, flags);
+		return USB_CHG_TYPE__WALLCHARGER;
+	} else if (ui->pdata->prop_chg) {
+		if (ui->gadget.speed == USB_SPEED_LOW || ui->gadget.speed == USB_SPEED_FULL || ui->gadget.speed == USB_SPEED_HIGH){
+			spin_unlock_irqrestore(&ui->lock, flags);
+			return USB_CHG_TYPE__SDP;
+		}
+		else{
+			spin_unlock_irqrestore(&ui->lock, flags);
+			return USB_CHG_TYPE__INVALID;
+		}
+	} else {
+		spin_unlock_irqrestore(&ui->lock, flags);
+		return USB_CHG_TYPE__SDP;
+	}
+}
+#endif
 static inline enum chg_type usb_get_chg_type(struct usb_info *ui)
 {
 	if ((readl_relaxed(USB_PORTSC) & PORTSC_LS) == PORTSC_LS) {
@@ -316,7 +357,14 @@ static inline enum chg_type usb_get_chg_type(struct usb_info *ui)
 	}
 }
 
+#ifdef CONFIG_SKY_CHARGING
+#define USB_WALLCHARGER_CHG_CURRENT 900
+#else
 #define USB_WALLCHARGER_CHG_CURRENT 1800
+#endif
+
+extern int pm8058_is_factory_cable(void);
+
 #define USB_PROPRIETARY_CHG_CURRENT 500
 static int usb_get_max_power(struct usb_info *ui)
 {
@@ -326,7 +374,9 @@ static int usb_get_max_power(struct usb_info *ui)
 	int suspended;
 	int configured;
 	unsigned bmaxpow;
-
+#ifdef CONFIG_SKY_CHARGING
+	int factory_check;
+#endif
 	if (ui->gadget.is_a_peripheral)
 		return -EINVAL;
 
@@ -344,17 +394,38 @@ static int usb_get_max_power(struct usb_info *ui)
 		return USB_WALLCHARGER_CHG_CURRENT;
 	else if (ui->pdata->prop_chg)
 		return USB_PROPRIETARY_CHG_CURRENT;
-		
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
+
+#ifdef CONFIG_SKY_CHARGING
+	factory_check = pm8058_is_factory_cable();
+	if (factory_check)
+		return 1500;
+
+	if(suspended && (temp == USB_CHG_TYPE__SDP))
+		return 600;
+
+	if((ui->usb_state == USB_STATE_ADDRESS) && (temp == USB_CHG_TYPE__SDP))
+		return 500;
+#endif
+
+#if defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
 	if(suspended && (temp == USB_CHG_TYPE__SDP))
 		return 500;
 
 	if((ui->usb_state == USB_STATE_ADDRESS) && (temp == USB_CHG_TYPE__SDP))
 		return 500;		
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#endif  
 
+#ifdef FEATURE_MDM_APK_UMS_CTL
+	if (suspended || !configured){
+		if(get_pantech_mdm_state() && (temp != USB_CHG_TYPE__WALLCHARGER)){
+			return 500;
+		}
+		return 0;
+	}
+#else
 	if (suspended || !configured)
 		return 0;
+#endif
 
 	return bmaxpow;
 }
@@ -470,6 +541,10 @@ static void usb_chg_detect(struct work_struct *w)
 	}
 	spin_unlock_irqrestore(&ui->lock, flags);
 
+#ifdef CONFIG_SKY_CHARGING
+	dev_info(&ui->pdev->dev, "[SKY CHG]usb_chg_detect %d, chg_type %d\n", ui->usb_state, temp);
+#endif
+
 	atomic_set(&otg->chg_type, temp);
 	maxpower = usb_get_max_power(ui);
 	if (maxpower > 0)
@@ -486,6 +561,12 @@ static void usb_chg_detect(struct work_struct *w)
 		pm_runtime_put_sync(&ui->pdev->dev);
 		wake_unlock(&ui->wlock);
 	}
+	
+#ifdef FEATURE_MDM_APK_UMS_CTL
+	if(get_pantech_mdm_state() && (temp == USB_CHG_TYPE__SDP)){
+		pantech_usb_gadget_disconnect();				
+	}
+#endif	
 }
 
 static int usb_ep_get_stall(struct msm_endpoint *ept)
@@ -1266,6 +1347,11 @@ static void flush_endpoint_sw(struct msm_endpoint *ept)
 	struct msm_request *req, *next_req = NULL;
 	unsigned long flags;
 
+// P13120, [PATCH] USB: msm72k_udc: Flush both control out and in requests on _dequeue --->>>	
+	if (!ept->req)
+		return;
+// P13120, [PATCH] USB: msm72k_udc: Flush both control out and in requests on _dequeue ---<<<
+
 	/* inactive endpoints have nothing to do here */
 	if (ept->ep.maxpacket == 0)
 		return;
@@ -1310,8 +1396,16 @@ static void flush_endpoint(struct msm_endpoint *ept)
 static irqreturn_t usb_interrupt(int irq, void *data)
 {
 	struct usb_info *ui = data;
+// P13120, [PATCH] USB: msm72k_udc: Don't handle asynchronous interrupt --->>>
+	struct msm_otg *dev = to_msm_otg(ui->xceiv);
+// P13120, [PATCH] USB: msm72k_udc: Don't handle asynchronous interrupt ---<<<	
 	unsigned n;
 	unsigned long flags;
+
+// P13120, [PATCH] USB: msm72k_udc: Don't handle asynchronous interrupt --->>>
+	if (atomic_read(&dev->in_lpm))
+		return IRQ_NONE;
+// P13120, [PATCH] USB: msm72k_udc: Don't handle asynchronous interrupt ---<<<
 
 	n = readl(USB_USBSTS);
 	writel(n, USB_USBSTS);
@@ -1380,11 +1474,9 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 			/* XXX: we can't seem to detect going offline,
 			 * XXX:  so deconfigure on reset for the time being
 			 */
-			if (ui->driver) {
-				dev_dbg(&ui->pdev->dev,
+			dev_dbg(&ui->pdev->dev,
 					"usb: notify offline\n");
-				ui->driver->disconnect(&ui->gadget);
-			}
+			ui->driver->disconnect(&ui->gadget);
 			/* cancel pending ep0 transactions */
 			flush_endpoint(&ui->ep0out);
 			flush_endpoint(&ui->ep0in);
@@ -1618,7 +1710,11 @@ static void usb_do_work(struct work_struct *w)
 			 * the signal to go offline, we must honor it
 			 */
 			if (flags & USB_FLAG_VBUS_OFFLINE) {
-
+#ifdef FEATURE_MDM_APK_UMS_CTL
+				if(get_pantech_mdm_state()){
+					pantech_usb_gadget_connect();				
+				}
+#endif
 				ui->chg_current = 0;
 				/* wait incase chg_detect is running */
 				if (!ui->gadget.is_a_peripheral)
@@ -1658,6 +1754,22 @@ static void usb_do_work(struct work_struct *w)
 				usb_phy_set_power(ui->xceiv, 0);
 
 				if (ui->irq) {
+// P13120, [PATCH] USB: msm72k_udc: Disable all usb interrupts & acknowledge them --->>>
+					/* Disable and acknowledge all
+					 * USB interrupts before freeing
+					 * irq, so that no USB spurious
+					 * interrupt occurs during USB cable
+					 * disconnect which may lead to
+					 * IRQ nobody cared error.
+					 */
+					writel_relaxed(0, USB_USBINTR);
+					writel_relaxed(readl_relaxed(USB_USBSTS)
+											, USB_USBSTS);
+					/* Ensure that above STOREs are
+					 * completed before enabling
+					 * interrupts */
+					wmb();
+// P13120, [PATCH] USB: msm72k_udc: Disable all usb interrupts & acknowledge them ---<<<					
 					free_irq(ui->irq, ui);
 					ui->irq = 0;
 				}
@@ -1747,6 +1859,11 @@ static void usb_do_work(struct work_struct *w)
 				ui->irq = otg->irq;
 				enable_irq_wake(otg->irq);
 
+#ifdef FEATURE_MDM_APK_UMS_CTL
+				if(get_pantech_mdm_state() && !atomic_read(&ui->softconnect)){
+					pantech_usb_gadget_connect();				
+				}
+#endif
 				if (!atomic_read(&ui->softconnect))
 					break;
 				msm72k_pullup_internal(&ui->gadget, 1);
@@ -1755,6 +1872,7 @@ static void usb_do_work(struct work_struct *w)
 					schedule_delayed_work(
 							&ui->chg_det,
 							USB_CHG_DET_DELAY);
+
 			}
 			break;
 		}
@@ -2197,6 +2315,11 @@ msm72k_queue(struct usb_ep *_ep, struct usb_request *req, gfp_t gfp_flags)
 	struct msm_endpoint *ep = to_msm_endpoint(_ep);
 	struct usb_info *ui = ep->ui;
 
+// P13120, [PATCH] USB: msm72k_udc: Flush both control out and in requests on _dequeue --->>>	
+	if (!atomic_read(&ui->softconnect))
+		return -ENODEV;
+// P13120, [PATCH] USB: msm72k_udc: Flush both control out and in requests on _dequeue ---<<<
+
 	if (ep == &ui->ep0in) {
 		struct msm_request *r = to_msm_request(req);
 		if (!req->length)
@@ -2223,6 +2346,15 @@ static int msm72k_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 
 	struct msm_request *temp_req;
 	unsigned long flags;
+
+// P13120, [PATCH] USB: msm72k_udc: Flush both control out and in requests on _dequeue --->>>
+	if (ep->num == 0) {
+		/* Flush both out and in control endpoints */
+		flush_endpoint(&ui->ep0out);
+		flush_endpoint(&ui->ep0in);
+		return 0;
+	}	
+// P13120, [PATCH] USB: msm72k_udc: Flush both control out and in requests on _dequeue ---<<<
 
 	if (!(ui && req && ep->req))
 		return -EINVAL;
@@ -2627,11 +2759,7 @@ static ssize_t show_usb_chg_type(struct device *dev,
 	return count;
 }
 static DEVICE_ATTR(wakeup, S_IWUSR, 0, usb_remote_wakeup);
-#if defined(CONFIG_ANDROID_PANTECH_USB)
-static DEVICE_ATTR(usb_state, S_IRUSR | S_IRGRP | S_IROTH, show_usb_state, 0);
-#else
 static DEVICE_ATTR(usb_state, S_IRUSR, show_usb_state, 0);
-#endif
 static DEVICE_ATTR(usb_speed, S_IRUSR, show_usb_speed, 0);
 static DEVICE_ATTR(chg_type, S_IRUSR, show_usb_chg_type, 0);
 static DEVICE_ATTR(chg_current, S_IWUSR | S_IRUSR,

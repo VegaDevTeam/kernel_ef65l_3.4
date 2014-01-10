@@ -417,6 +417,7 @@ struct msmsdcc_host {
 	struct device_attribute	polling;
 	struct device_attribute idle_timeout;
 	struct device_attribute auto_cmd19_attr;
+	int gpio_status_flag;	// Fixed Non-Sleep. Because of SDIO_IRQ. by dscheon	
 };
 
 #define MSMSDCC_VERSION_MASK	0xFFFF

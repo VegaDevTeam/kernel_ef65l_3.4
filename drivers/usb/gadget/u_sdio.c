@@ -30,13 +30,16 @@
 #include <mach/sdio_cmux.h>
 #include "u_serial.h"
 
-// 20111014, albatros, for PDL IDLE
-#if 1//def FEATURE_SKY_PDL_DLOAD
+
+#if defined(CONFIG_PANTECH_PDL_DLOAD) && ( defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD) )
 #include <linux/reboot.h>
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <asm/uaccess.h>
 #include <linux/workqueue.h>
+
+//#include "sky_rawdata.h"
+//#include "../../../../vendor/pantech/frameworks/sky_rawdata/sky_rawdata.h"
 
 #define SECTOR_SIZE               512
 #define SKY_RAWDATA_MAX           (8192*SECTOR_SIZE) // 4MB
@@ -120,7 +123,6 @@ typedef struct {
 
 typedef  unsigned long int  uint32;      /* Unsigned 32 bit value */
 typedef  unsigned char      uint8;       /* Unsigned 8  bit value */
-
 typedef struct {
   uint32 version_;
   char   model_name_    [ 16 ];
@@ -130,20 +132,22 @@ typedef struct {
   char   build_date_    [ 16 ];
   char   build_time_    [ 16 ];
 
-  //ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ®ï¿½Î´ï¿½ ï¿½ï¿½ï¿½ï¿½
-  uint32 boot_loader_version_;                // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì³Ê¸ï¿½ï¿½ï¿½ ï¿½Â´ï¿½ ï¿½ï¿½Æ®ï¿½Î´ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
-  uint32 boot_section_id_[4];                 // ï¿½ï¿½Æ®ï¿½Î´ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ù²ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ýµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Þ¾Æ¾ï¿½ ï¿½Ï´ï¿½ section id
-  
-  // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ EFS ï¿½ï¿½ï¿½ï¿½
-  uint32              efs_size_;                // ï¿½ï¿½Ã¼ EFS ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
-  uint32              partition_num_;           // EFSï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ¼ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
-  partition_info_type partition_info_[ 6 ];     // EFSï¿½ï¿½ ï¿½ï¿½Æ¼ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+  //���� ��Ʈ�δ� ����
+  uint32 boot_loader_version_;                  // ���� ���� ���̳ʸ��� �´� ��Ʈ�δ��� ����
+  uint32 boot_section_id_[4];                 // ��Ʈ�δ� ������ �ٲ�� ��� �ݵ�� ���� �޾ƾ� �ϴ� section id
 
-  uint32 FusionID;
-  uint8  Imei[15];
-  uint8  reserved_2[ 61 ];
-  
+  // ���� ���� EFS ����
+  uint32              efs_size_;                // ��ü EFS ������
+  uint32              partition_num_;           // EFS�� ���� ��Ƽ���� ����
+  partition_info_type partition_info_[ 6 ];     // EFS�� ��Ƽ���� ����
+
+  uint32 fusion_id_;
+  uint8  imei_[ 15 ];
+
+  uint8  reserved_[ 61 ];
 } phoneinfo_type;
+
+
 
 static struct delayed_work phoneinfo_read_wqst;
 static char pantech_phoneinfo_buff[SECTOR_SIZE]={0,};
@@ -163,7 +167,9 @@ static void load_phoneinfo_with_imei(struct work_struct *work_s);
 static unsigned fill_writereq(int *dloadinfo_state, struct usb_request *writereq);
 static unsigned int fill_phoneinfo(char *buff);
 static unsigned int check_phoneinfo(void);
-#endif 
+#endif
+
+
 #define SDIO_RX_QUEUE_SIZE		8
 #define SDIO_RX_BUF_SIZE		2048
 
@@ -435,62 +441,56 @@ int gsdio_write(struct gsdio_port *port, struct usb_request *req)
 	return ret;
 }
 
-// 20111014, albatros, for PDL IDLE
-#if 1//def FEATURE_SKY_PDL_DLOAD
+
+#if defined (CONFIG_PANTECH_PDL_DLOAD) && (defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD) )
 static unsigned int fill_phoneinfo(char *buff)
 {
   phoneinfo_type *pantech_phoneinfo_buff_ptr;
-
   pantech_phoneinfo_buff_ptr = (phoneinfo_type *)&pantech_phoneinfo_buff[16];
-  
-  if(pantech_phoneinfo_buff_ptr->version_== 0) 
+  if(pantech_phoneinfo_buff_ptr->version_== 0)
   {
     printk(KERN_ERR "%s: phoneinfo is broken or empty\n", __func__);
     return 0;
   }
-
   memcpy(buff, pantech_phoneinfo_buff, 16 + sizeof(phoneinfo_type));
-  printk(KERN_INFO "%s: phoneinfo is OK\n", __func__);  
+  printk(KERN_INFO "%s: phoneinfo is OK\n", __func__);
   return (16 + sizeof(phoneinfo_type));
 }
-
 static unsigned int check_phoneinfo(void)
 {
   phoneinfo_type *pantech_phoneinfo_buff_ptr;
-
   pantech_phoneinfo_buff_ptr = (phoneinfo_type *)&pantech_phoneinfo_buff[16];
-  
-  if(pantech_phoneinfo_buff_ptr->version_== 0) 
+
+  if(pantech_phoneinfo_buff_ptr->version_== 0)
+
   {
     printk(KERN_ERR "%s: phoneinfo is broken or empty\n", __func__);
     return 0;
   }
 
-  printk(KERN_INFO "%s: phoneinfo is OK\n", __func__);  
+  printk(KERN_INFO "%s: phoneinfo is OK\n", __func__);
   return 1;
 }
 
 static void load_phoneinfo_with_imei(struct work_struct *work_s)
 {
-        struct file *rawdata_filp;
-        char read_buf[SECTOR_SIZE];
-        mm_segment_t oldfs;
-        int rc;
-        imei_backup_info_type *imei_backup_info_buf;
-	phoneinfo_type *pantech_phoneinfo_buff_ptr;
+  struct file *rawdata_filp;
+  char read_buf[SECTOR_SIZE];
+  mm_segment_t oldfs;
+  int rc;
+  imei_backup_info_type *imei_backup_info_buf;
+  phoneinfo_type *pantech_phoneinfo_buff_ptr;
+  static int read_count = 0;
 
-  static int read_count = 0;  
+
   printk(KERN_INFO "%s: read phone info start\n", __func__);
 
-  // phoneinfo buffer init
-  memset( pantech_phoneinfo_buff, 0x0, SECTOR_SIZE );  
+  memset( pantech_phoneinfo_buff, 0x0, SECTOR_SIZE );
 
-	// Setting based value to adjust format of phoneinfo packet 
-	pantech_phoneinfo_buff[0] = 1;
-	pantech_phoneinfo_buff[9] = 1;
-	pantech_phoneinfo_buff_ptr = (phoneinfo_type *)&pantech_phoneinfo_buff[16];
+  pantech_phoneinfo_buff[0] = 1;
+  pantech_phoneinfo_buff[9] = 1;
+  pantech_phoneinfo_buff_ptr = (phoneinfo_type *)&pantech_phoneinfo_buff[16];
 
-     // Open phoneinfo partition
   oldfs = get_fs();
   set_fs(KERNEL_DS);
   rawdata_filp = filp_open("/dev/block/mmcblk0p10", O_RDONLY | O_SYNC, 0);
@@ -503,20 +503,17 @@ static void load_phoneinfo_with_imei(struct work_struct *work_s)
   set_fs(oldfs);
   printk(KERN_INFO "%s: file open OK\n", __func__);
 
-  // Lseek phoneinfo partition
   rawdata_filp->f_pos = 0;
   memset( read_buf, 0x0, SECTOR_SIZE );
-   // Read phoneinfo partition
 	if(((rawdata_filp->f_flags & O_ACCMODE) & O_RDONLY) != 0)
   {
     printk(KERN_ERR "%s: read permission denied\n",__func__);
     return;
 	}
-
   oldfs = get_fs();
   set_fs(KERNEL_DS);
   rc = rawdata_filp->f_op->read(rawdata_filp, read_buf, SECTOR_SIZE, &rawdata_filp->f_pos);
-  if (rc < 0) 
+  if (rc < 0)
   {
     set_fs(oldfs);
     printk(KERN_ERR "%s: read phoneinfo error = %d \n",__func__,rc);
@@ -525,11 +522,8 @@ static void load_phoneinfo_with_imei(struct work_struct *work_s)
   }
   set_fs(oldfs);
   memcpy(pantech_phoneinfo_buff_ptr, &read_buf[32], sizeof(phoneinfo_type));
-
   printk(KERN_INFO "%s: read Phoneinfo OK\n", __func__);
 
-    // read IMEI
-  // lseek
 #if 1
   rawdata_filp->f_pos = NON_SECURE_IMEI_START;
   memset( read_buf, 0x0, SECTOR_SIZE );
@@ -561,13 +555,10 @@ static void load_phoneinfo_with_imei(struct work_struct *work_s)
   imei_backup_info_buf = (imei_backup_info_type *)&read_buf[0];
   if(imei_backup_info_buf->imei_magic_num & IMEI_ADDR_MAGIC_NUM) 
   {
-    memcpy(pantech_phoneinfo_buff_ptr->Imei, read_buf+4, NV_UE_IMEI_SIZE);
+    memcpy(pantech_phoneinfo_buff_ptr->imei_, read_buf+4, NV_UE_IMEI_SIZE);
   }
 #endif
-
-  // close(
   filp_close(rawdata_filp, NULL);
-
   if(check_phoneinfo() != 1 && read_count < 5)
   {
     schedule_delayed_work(&phoneinfo_read_wqst, HZ*10);
@@ -578,11 +569,9 @@ static void load_phoneinfo_with_imei(struct work_struct *work_s)
   return;
 
 }
-
 unsigned fill_writereq(int *dloadinfo_state, struct usb_request *writereq)
 {
   unsigned len = TX_BUF_SIZE;
-
   switch( *dloadinfo_state )
   {
     case DLOADINFO_AT_RESPONSE_STATE:
@@ -593,7 +582,6 @@ unsigned fill_writereq(int *dloadinfo_state, struct usb_request *writereq)
       printk(KERN_ERR "%s: AT*PHONEINFO*WAIT", __func__);
     }
     break;
-  
     case DLOADINFO_PHONE_INFO_STATE:
     {
       //int i;
@@ -604,22 +592,19 @@ unsigned fill_writereq(int *dloadinfo_state, struct usb_request *writereq)
       //    error_code    4byte
       //    data_length   4byte
       //    reserved      4byte
-
       printk(KERN_ERR "%s: case DLOADINFO_PHONE_INFO_STATE", __func__);
       memset( writereq->buf, 0x0, 16 + sizeof(phoneinfo_type) );
-      len = writereq->length = fill_phoneinfo((char *)writereq->buf); 
-
+      len = writereq->length = fill_phoneinfo((char *)writereq->buf);
       #if 0 //test
         for( i=3; i < len/16; i++ )
         {
           printk(KERN_ERR "%s : phoneinfo <%x> %x %x %x %x, %x %x %x %x, %x %x %x %x, %x %x %x %x\n",__func__,i*16,tx_buf[i*16],tx_buf[i*16+1],tx_buf[i*16+2],tx_buf[i*16+3],tx_buf[i*16+4],tx_buf[i*16+5],tx_buf[i*16+6],tx_buf[i*16+7],tx_buf[i*16+8],tx_buf[i*16+9],tx_buf[i*16+10],tx_buf[i*16+11],tx_buf[i*16+12],tx_buf[i*16+13],tx_buf[i*16+14],tx_buf[i*16+15]);
         }
-      #endif 
-
+      #endif
       printk(KERN_ERR "%s: packet make DLOADINFO_PHONE_INFO_STATE", __func__);
     }
     break;
-  
+
     case DLOADINFO_FINISH_STATE:
     {
       // header
@@ -641,19 +626,18 @@ unsigned fill_writereq(int *dloadinfo_state, struct usb_request *writereq)
   }
   return len;
 }
-#endif 
+#endif
+
 void gsdio_rx_push(struct work_struct *w)
 {
 	struct gsdio_port *port = container_of(w, struct gsdio_port, push);
 	struct list_head *q = &port->read_queue;
 	struct usb_ep		*out;
 	int ret;
-// 20111014, albatros, for PDL IDLE
-#if 1//def FEATURE_SKY_PDL_DLOAD
+#if defined(CONFIG_PANTECH_PDL_DLOAD) && ( defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD) )
 	struct list_head *pool_write = &port->write_pool;
 	static int dloadinfo_state = DLOADINFO_NONE_STATE;
 	const unsigned short DLOADINFO_PACKET_VERSION = 0;
-	//int pdl_restart = 0; //temp
 #endif
 
 	pr_debug("%s: port:%p port#%d read_queue:%p", __func__,
@@ -689,85 +673,81 @@ void gsdio_rx_push(struct work_struct *w)
 			break;
 		}
 
-//20110721 choiseulkee add, reboot for PDL IDLE download
-#if 1//def FEATURE_SKY_PDL_DLOAD
-    if(check_phoneinfo() == 1)
-    {
-      if( memcmp( req->buf, "AT*PHONEINFO*RESET", sizeof("AT*PHONEINFO*RESET")-1) == 0 )
-      {
+
+#if defined (CONFIG_PANTECH_PDL_DLOAD) && ( defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD) )
+
+	if(check_phoneinfo() == 1)
+	{
+	  if( memcmp( req->buf, "AT*PHONEINFO*RESET", sizeof("AT*PHONEINFO*RESET")-1) == 0 )
+	  {
         printk(KERN_ERR "%s: PDL IDLE DLOAD REBOOT", __func__);
-        // albatros, ¾÷µ¥ÀÌÆ®½Ã ºÎÆÃ½Ã Á¦´ë·Î ÀÎ½ÄÇÏÁö ¸øÇÏ´Â °æ¿ì°¡ ÀÖ¾î¼­ ÀÏ´Ü ´Ù¸¥°É·Î ¹Ù²ãº½
-        //machine_restart("oem-33");
-#if 0 //PZ2223, pdl restart - spin_lock_irq error
-		pdl_restart=0707;
-#else
-         machine_restart("oem-33");
-		//kernel_restart("oem-33");//temp
-		return;
-#endif //PZ2223, pdl restart - spin_lock_irq error
-
-      }
-      else if(memcmp( req->buf, "AT*PHONEINFO", sizeof("AT*PHONEINFO")-1) == 0 )
-      {
+	   // kernel_restart("oem-33");
+	   machine_restart("oem-33");
+	    return;
+	  }
+	  else if(memcmp( req->buf, "AT*PHONEINFO", sizeof("AT*PHONEINFO")-1) == 0 )
+	  {
         printk(KERN_ERR "%s: go DLOADINFO_AT_RESPONSE_STATE", __func__);
-        dloadinfo_state = DLOADINFO_AT_RESPONSE_STATE;
-      }
-      else if( dloadinfo_state == DLOADINFO_AT_RESPONSE_STATE || dloadinfo_state == DLOADINFO_PHONE_INFO_STATE )
-      {
+	    dloadinfo_state = DLOADINFO_AT_RESPONSE_STATE;
+	  }
+	  else if( dloadinfo_state == DLOADINFO_AT_RESPONSE_STATE || dloadinfo_state == DLOADINFO_PHONE_INFO_STATE )
+	  {
         printk(KERN_ERR "%s: if %d", __func__, dloadinfo_state);
-        if( *(unsigned int *)(req->buf) == (PHONE_INFO_CMD|(DLOADINFO_PACKET_VERSION<<16)) )
-        {
-          dloadinfo_state = DLOADINFO_PHONE_INFO_STATE;
+	    if( *(unsigned int *)(req->buf) == (PHONE_INFO_CMD|(DLOADINFO_PACKET_VERSION<<16)) )
+	    {
+	      dloadinfo_state = DLOADINFO_PHONE_INFO_STATE;
           printk(KERN_ERR "%s: go DLOADINFO_PHONE_INFO_STATE", __func__);
-        }
-        if( *(unsigned int *)(req->buf) == (FINISH_CMD|(DLOADINFO_PACKET_VERSION<<16)) )
-        {
-          dloadinfo_state = DLOADINFO_FINISH_STATE;
+	    }
+	    if( *(unsigned int *)(req->buf) == (FINISH_CMD|(DLOADINFO_PACKET_VERSION<<16)) )
+	    {
+	      dloadinfo_state = DLOADINFO_FINISH_STATE;
           printk(KERN_ERR "%s: go DLOADINFO_FINISH_STATE", __func__);
-        }
-      }
+	    }
+	  }
 
-      if( dloadinfo_state != DLOADINFO_NONE_STATE )
-      {
+	if( dloadinfo_state != DLOADINFO_NONE_STATE )
+	{
         printk(KERN_ERR "%s: run cmd send_dload_packet", __func__);
 
         if (!list_empty(pool_write))
-        {
-          struct usb_ep *in = port->port_usb->in;
+		{
+         
+ 		  struct usb_ep *in = port->port_usb ? port->port_usb->in : NULL;
           struct usb_request *writereq;
           unsigned len = TX_BUF_SIZE;
-          int ret;
-
+          int ret=-1;
+		  
+		  if (in == NULL)	
+		  	break;
           printk(KERN_ERR "%s: if start, before list_entry", __func__);
           writereq = list_entry(pool_write->next, struct usb_request, list);
-
           list_del(&writereq->list);
-
           len = fill_writereq(&dloadinfo_state, writereq);
 
           printk(KERN_ERR "%s: before usb_ep_queue, len= %d", __func__, len);
       		spin_unlock_irq(&port->port_lock);
+		if(in->ops && in->ops->queue)
       		ret = usb_ep_queue(in, writereq, GFP_KERNEL);
       		spin_lock_irq(&port->port_lock);
           printk(KERN_ERR "%s: ret=%d", __func__,ret);
-      		if (ret) 
-          {
+      		if (ret)
+			{
       			pr_err("%s: usb ep out queue failed"
       					"port:%p, port#%d err:%d\n",
       					__func__, port, port->port_num, ret);
-      			/* could be usb disconnected */
       			if (!port->port_usb)
       			{
-              printk(KERN_ERR "%s: before gsdio_free_req", __func__);
+           			 printk(KERN_ERR "%s: before gsdio_free_req", __func__);
       				gsdio_free_req(in, writereq);
-      			}
-      		}
-          port->nbytes_tolaptop += len;
+					goto rx_push_end;
+			}
+		}
+            port->nbytes_tolaptop += len;
       		port->n_read = 0;
       		list_move(&req->list, &port->read_pool);
           goto rx_push_end;
         }
-      }
+	}
     }
 #endif
 
@@ -810,12 +790,6 @@ void gsdio_rx_push(struct work_struct *w)
 	}
 rx_push_end:
 	spin_unlock_irq(&port->port_lock);
-#if 0 //PZ2223, pdl restart - spin_lock_irq error
-	if( pdl_restart == 0707 )
-	{
-		kernel_restart("oem-33");
-	}
-#endif //PZ2223, pdl restart - spin_lock_irq error
 
 	/* start queuing out requests again to host */
 	gsdio_start_rx(port);
@@ -1557,10 +1531,8 @@ int gsdio_setup(struct usb_gadget *g, unsigned count)
 	coding.bCharFormat = 8;
 	coding.bParityType = USB_CDC_NO_PARITY;
 	coding.bDataBits = USB_CDC_1_STOP_BITS;
-
-// 20111014, albatros, for PDL IDLE
-#if 1//def FEATURE_SKY_PDL_DLOAD
-  INIT_DELAYED_WORK(&phoneinfo_read_wqst, load_phoneinfo_with_imei);
+#if defined(CONFIG_PANTECH_PDL_DLOAD) && ( defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD) )
+ 	INIT_DELAYED_WORK(&phoneinfo_read_wqst, load_phoneinfo_with_imei);
 	schedule_delayed_work(&phoneinfo_read_wqst, HZ*10);
 #endif
 

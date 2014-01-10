@@ -31,10 +31,24 @@
 #ifndef MIPI_SONY_H
 #define MIPI_SONY_H
 
-#define MIPI_CLOCK_500MBPS
+#if 1//(BOARD_REV >= WS20)        
+#define BL_MAX	32
+#else
+#define BL_MAX	16
+#endif
 
+#if 0//(BOARD_REV <= WS20)
+#define MIPI_CLOCK_250MBPS
+#else
+//#define MIPI_CLOCK_450MBPS
+//#define MIPI_CLOCK_400MBPS
+#define MIPI_CLOCK_500MBPS
+#endif
+
+//#define MIPI_CLOCK_400MBPS
+//#define MIPI_CLOCK_500MBPS
 int mipi_sony_device_register(struct msm_panel_info *pinfo,
 					u32 channel, u32 panel);
 
-#endif  /* MIPI_SONY_H */
+#endif  /* MIPI_SAMSUNG_H */
 

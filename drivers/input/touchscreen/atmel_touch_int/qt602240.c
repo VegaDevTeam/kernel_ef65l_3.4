@@ -1,4 +1,4 @@
-/* file_name: qt602240.c
+/** file_name: qt602240.c
  *
  * description: Quantum TSP driver.
  *
@@ -34,26 +34,15 @@
 #include <mach/board-msm8660.h>
 #include "qt602240.h"
 #include "touch_monitor.h"
+#include "../touch_ioctl.h"
+//#define BOARD_REVISION
 
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-#include <linux/leds-pm8058.h>
-#endif
-
-
-#if defined(CONFIG_SKY_EF39S_BOARD)
+#if defined(CONFIG_PANTECH_EF39S_BOARD)
 #include "qt602240_cfg_ef39s.h"
-#elif defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD)	
-#if (BOARD_REV >= TP10)
+#elif defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD)	
 #include "qt602240_cfg_ef40k.h"
-#elif (BOARD_REV <= WS20)
-#include "qt602240_cfg_ef40k_ws20.h"
-#endif
-#elif defined(CONFIG_PANTECH_PRESTO_BOARD)
-#include "qt602240_cfg_presto.h"
-#elif defined(CONFIG_SKY_EF65L_BOARD)
+#elif defined(CONFIG_PANTECH_EF65L_BOARD)
 #include "qt602240_cfg_ef65l.h"
-#elif defined(CONFIG_PANTECH_QUANTINA_BOARD)
-#include "qt602240_cfg_quantina.h"
 #else
 #include "qt602240_cfg.h"
 #endif
@@ -62,7 +51,7 @@
 /* debug option */
 /* -------------------------------------------------------------------- */
 
-static int DebugON = 0;
+static int DebugON = 	0;
 
 #define dbg(fmt, args...) if(DebugON) printk("[QT602240] " fmt, ##args)
 #define dbg_raw(fmt, args...) if(DebugON) printk("" fmt, ##args)
@@ -93,6 +82,13 @@ uint8_t	QT_Boot(bool withReset);
 #define ANTI_TOUCH_HOLE
 #define TCHAUTOCAL_AFTER_CALIBRATING
 
+
+/*----------------------------------------------------------------------*/
+/* LCD MHL JB upgrade. */
+/*----------------------------------------------------------------------*/
+//#define PANTECH_MHL_TOUCH_EVENT
+
+
 /* -------------------------------------------------------------------- */
 /* function proto type & variable for driver							*/
 /* -------------------------------------------------------------------- */
@@ -108,58 +104,10 @@ struct device *ts_dev;
 void report_input(void);
 void get_message(struct work_struct * p);
 
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-/* Sweep to wake values are 
- * 0 = no sweep2wake
- * 1 = sweep2wake with no backlight
- * 2 = sweep2wake with backlight
- */
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_DISABLED
-int s2w_switch = 0;
-int s2w_temp = 0;
-#elif defined(CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_ENABLED)
-int s2w_switch = 1;
-int s2w_temp = 1;
-#elif defined(CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE_ENABLED_WITH_BACKLIGHT)
-int s2w_switch = 2;
-int s2w_temp = 2;
-#endif
-bool scr_suspended = false, exec_count = true, s2w_switch_changed = false;
-bool scr_on_touch = false, led_exec_count = false, barrier[2] = {false, false};
-static struct input_dev * sweep2wake_pwrdev;
-static struct led_classdev * sweep2wake_leddev;
-static DEFINE_MUTEX(pwrlock);
+#ifdef PANTECH_MHL_TOUCH_EVENT
+void pantech_mhl_touch_handler(void);
+void pantech_mhl_touch_func(struct work_struct * p);
 
-extern void sweep2wake_setdev(struct input_dev * input_device) {
-	sweep2wake_pwrdev = input_device;
-	return;
-}
-EXPORT_SYMBOL(sweep2wake_setdev);
-
-extern void sweep2wake_setleddev(struct led_classdev * led_dev) {
-	sweep2wake_leddev = led_dev;
-	return;
-}
-EXPORT_SYMBOL(sweep2wake_setleddev);
-
-static void sweep2wake_presspwr(struct work_struct * sweep2wake_presspwr_work) {
-	input_event(sweep2wake_pwrdev, EV_KEY, KEY_POWER, 1);
-	input_event(sweep2wake_pwrdev, EV_SYN, 0, 0);
-	msleep(100);
-	input_event(sweep2wake_pwrdev, EV_KEY, KEY_POWER, 0);
-	input_event(sweep2wake_pwrdev, EV_SYN, 0, 0);
-	msleep(100);
-	mutex_unlock(&pwrlock);
-	return;
-}
-static DECLARE_WORK(sweep2wake_presspwr_work, sweep2wake_presspwr);
-
-void sweep2wake_pwrtrigger(void) {
-	if (mutex_trylock(&pwrlock)) {
-		schedule_work(&sweep2wake_presspwr_work);
-	}
-	return;
-}
 #endif
 
 static const struct i2c_device_id qt602240_id[] = {
@@ -194,6 +142,9 @@ struct qt602240_data_t
 #endif
 	struct early_suspend es;
 	struct mutex    lock;
+#ifdef PANTECH_MHL_TOUCH_EVENT
+	struct work_struct work_mhl_touch_event;
+#endif
 };
 struct qt602240_data_t *qt602240_data = NULL;
 
@@ -214,46 +165,6 @@ static DEVICE_ATTR(gpio, S_IRUGO | S_IWUSR, gpio_show, gpio_store);
 static DEVICE_ATTR(i2c, S_IRUGO | S_IWUSR, i2c_show, i2c_store);
 static DEVICE_ATTR(setup, S_IRUGO | S_IWUSR, setup_show, setup_store);
 /* -------------------------------------------------------------------- */
-
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-static ssize_t atmel_sweep2wake_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	size_t count = 0;
-	
-	if (s2w_switch == s2w_temp )
-		count += sprintf(buf, "%d\n", s2w_switch);
-	else
-		count += sprintf(buf, "%d->%d\n", s2w_switch, s2w_temp);
-
-	return count;
-}
-
-static ssize_t atmel_sweep2wake_dump(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	if (buf[0] >= '0' && buf[0] <= '2' && buf[1] == '\n')
-		if (s2w_switch != buf[0] - '0') {
-			s2w_temp = buf[0] - '0';
-			if (scr_suspended == false)
-				s2w_switch = s2w_temp;
-			else 
-				s2w_switch_changed = true;
-		}
-
-	if (s2w_temp == 0) 
-		printk(KERN_INFO "[sweep2wake]: Disabled.\n");
-	else if (s2w_temp == 1)
-		printk(KERN_INFO "[sweep2wake]: Enabled without Backlight.\n");
-	else if (s2w_temp == 2)
-		printk(KERN_INFO "[sweep2wake]: Enabled with Backlight.\n");
-
-	return count;
-}
-
-static DEVICE_ATTR(sweep2wake, (S_IWUSR|S_IRUGO),
-	atmel_sweep2wake_show, atmel_sweep2wake_dump);
-#endif
 
 typedef struct
 {
@@ -374,7 +285,6 @@ typedef enum
     TOUCH_EVENT_PRESS,
     TOUCH_EVENT_MOVE
 } TOUCH_EVENT;
-
 #ifdef CHARGER_MODE
 unsigned long current_charger_mode;
 unsigned long previous_charger_mode;
@@ -475,34 +385,6 @@ static int ts_fops_open(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-typedef enum {	
-	TOUCH_IOCTL_READ_LASTKEY=1001,	
-	TOUCH_IOCTL_DO_KEY,	
-	TOUCH_IOCTL_RELEASE_KEY, 
-	TOUCH_IOCTL_CLEAN,
-	TOUCH_IOCTL_DEBUG_,
-	TOUCH_IOCTL_RESTART,
-	TOUCH_IOCTL_PRESS_TOUCH,
-	TOUCH_IOCTL_RELEASE_TOUCH,
-	TOUCH_IOCTL_CHARGER_MODE,
-	POWER_OFF,
-
-	TOUCH_IOCTL_DELETE_ACTAREA = 2001,
-	TOUCH_IOCTL_RECOVERY_ACTAREA,
-	TOUCH_IOCTL_SENSOR_X = 2005,
-	TOUCH_IOCTL_SENSOR_Y,
-	TOUCH_IOCTL_CHECK_BASE,
-	TOUCH_IOCTL_READ_IC_VERSION,
-	TOUCH_IOCTL_READ_FW_VERSION,
-	TOUCH_IOCTL_START_UPDATE,
-	TOUCH_IOCTL_SELF_TEST,
-	TOUCH_IOCTL_DIAGNOSTIC_MIN_DEBUG,
-	TOUCH_IOCTL_DIAGNOSTIC_MAX_DEBUG,
-	TOUCH_IOCTL_INIT = 3001,	
-	TOUCH_IOCTL_OFF  = 3002,
-} TOUCH_IOCTL_CMD;
-
-
 #ifdef	EARJACK_TOUCH
 void pantech_touch_earjack(int flag)
 {
@@ -583,7 +465,7 @@ static long ts_fops_ioctl(struct file *filp,
 				input_report_key(qt602240_data->input_dev, (int)argp, 0);
 				input_sync(qt602240_data->input_dev); 
 			break;		
-		case TOUCH_IOCTL_DEBUG_:
+		case TOUCH_IOCTL_DEBUG:
 			dbg("Touch Screen Read Queue ~!!\n");	
 			queue_work(qt602240_wq, &qt602240_data->work);
 			break;
@@ -614,7 +496,7 @@ static long ts_fops_ioctl(struct file *filp,
 		case TOUCH_IOCTL_CHARGER_MODE:
 			qt_charger_mode_config(arg);
 			break;
-		case POWER_OFF:
+		case TOUCH_IOCTL_POWER_OFF:
 			pm_power_off();
 			break;
 		case TOUCH_IOCTL_DELETE_ACTAREA:
@@ -860,7 +742,6 @@ static int monitor_open(struct inode *inode, struct file *file)
 {
 	return 0; 
 }
-
 static int monitor_release(struct inode *inode, struct file *file) 
 {
 	return 0; 
@@ -868,7 +749,12 @@ static int monitor_release(struct inode *inode, struct file *file)
 static ssize_t monitor_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
 	int nBufSize=0;
-	if((size_t)(*ppos) > 0) return 0;
+	
+#ifdef PANTECH_MHL_TOUCH_EVENT
+	int rc = 0;
+#endif
+	if((size_t)(*ppos) > 0)
+		return 0;
 	if(buf!=NULL)
 	{
 		nBufSize=strlen(buf);
@@ -903,16 +789,21 @@ static ssize_t monitor_write(struct file *file, const char *buf, size_t count, l
 		if(strncmp(buf, "reset2", 6)==0)
 		{	
 			disable_irq(qt602240_data->client->irq);
-
 			TSP_Restart();
 			quantum_touch_probe();
-
 			enable_irq(qt602240_data->client->irq);
 		}
 		if(strncmp(buf, "reset3", 6)==0)
 		{	
 			TSP_Restart();
 		}
+#ifdef PANTECH_MHL_TOUCH_EVENT
+
+		if(strncmp(buf,"mhltouch",8)==0)
+		{
+			pantech_mhl_touch_handler();
+		}		
+#endif		
 	}
 	*ppos +=nBufSize;
 	return nBufSize;
@@ -921,7 +812,6 @@ static ssize_t monitor_read(struct file *file, char *buf, size_t count, loff_t *
 {
 	return 0; 
 }
-
 /*
  * Touch Monitor Interface 
  */
@@ -1153,13 +1043,15 @@ static uint8_t qt_charger_mode_config(unsigned long mode)
 	}
 	current_charger_mode = mode;
 
-	if (driver_setup != DRIVER_SETUP_OK)
+	
+    if (driver_setup != DRIVER_SETUP_OK){
 		return 0;
+    }
 
-	if (previous_charger_mode == mode)
+	if (previous_charger_mode == mode){
 		return 0;
+    }
 
-	printk("[QT602240] qt_charger_mode_config [charger_mode=%d, ,previous_charger_mode=%d] \n", (int)mode,(int)previous_charger_mode);
 	previous_charger_mode = mode;
 	switch (mode)
 	{
@@ -1229,13 +1121,8 @@ void qt_Power_Sleep(void)
 	if (driver_setup != DRIVER_SETUP_OK)
 		return;
 
-	/* Set Idle Acquisition Interval to 32 ms. */
 	power_config.idleacqint = 0;
-
-	/* Set Active Acquisition Interval to 16 ms. */
 	power_config.actvacqint = 0;
-
-	/* Set Active to Idle Timeout to 4 s (one unit = 200ms). */
 	power_config.actv2idleto = 0;
 
 	/* Write power config to chip. */
@@ -1245,15 +1132,6 @@ void qt_Power_Sleep(void)
 	dbg_func_out();
 }
 
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 void qt_Power_Config_Init(void)
 {
 	dbg_func_in();
@@ -1262,9 +1140,7 @@ void qt_Power_Config_Init(void)
 		return;
 
 	power_config.idleacqint = T7_IDLEACQINT;
-		/* Set Active Acquisition Interval to 16 ms. */
 	power_config.actvacqint = T7_ACTVACQINT;
-		/* Set Active to Idle Timeout to 4 s (one unit = 200ms). */
 	power_config.actv2idleto = T7_ACTV2IDLETO;
 
 	/* Write power config to chip. */
@@ -1276,15 +1152,6 @@ void qt_Power_Config_Init(void)
 	dbg_func_out();
 }
 
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 void qt_Acquisition_Config_Init(void)
 {
 	dbg_func_in();
@@ -1292,16 +1159,16 @@ void qt_Acquisition_Config_Init(void)
 	if (driver_setup != DRIVER_SETUP_OK)
 		return;
 
-	acquisition_config.chrgtime = T8_CHRGTIME; // 2us
-	acquisition_config.reserved = 0;	//5;
-	acquisition_config.tchdrift = T8_TCHDRIFT;	 // 4s
-	acquisition_config.driftst = T8_DRIFTST;	 // 4s
-	acquisition_config.tchautocal = T8_TCHAUTOCAL; // infinite
-	acquisition_config.sync = T8_SYNC; // disabled
+	acquisition_config.chrgtime = T8_CHRGTIME;
+	acquisition_config.reserved = 0;
+	acquisition_config.tchdrift = T8_TCHDRIFT;
+	acquisition_config.driftst = T8_DRIFTST;
+	acquisition_config.tchautocal = T8_TCHAUTOCAL;
+	acquisition_config.sync = T8_SYNC;
 	acquisition_config.atchcalst = T8_ATCHCALST;
 	acquisition_config.atchcalsthr = T8_ATCHCALSTHR;
-	acquisition_config.atchfrccalthr = T8_ATCHFRCCALTHR;     /*!< Anti-touch force calibration threshold */
-	acquisition_config.atchfrccalratio = T8_ATCHFRCCALRATIO;  /*!< Anti-touch force calibration ratio */  
+	acquisition_config.atchfrccalthr = T8_ATCHFRCCALTHR;
+	acquisition_config.atchfrccalratio = T8_ATCHFRCCALRATIO;
 
 	if (write_acquisition_config(acquisition_config) != CFG_WRITE_OK)
 	{
@@ -1311,31 +1178,21 @@ void qt_Acquisition_Config_Init(void)
 	dbg_func_out();
 }
 
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 void qt_Multitouchscreen_Init(void)
 {
 	dbg_func_in();
-
 	if (driver_setup != DRIVER_SETUP_OK)
 		return;
 
-	touchscreen_config.ctrl = T9_CTRL; //131; // enable + message-enable
-	touchscreen_config.movhysti = T9_MOVHYSTI/*10*/;	// Relate Touch Move and Click
-	touchscreen_config.movhystn = T9_MOVHYSTN/*2*/;
-	touchscreen_config.mrghyst = T9_MRGHYST/*10*/;
-	touchscreen_config.mrgthr = T9_MRGTHR/*30*/;
-	touchscreen_config.amphyst = T9_AMPHYST/*10*/;
-	touchscreen_config.yloclip = T9_YLOCLIP/*15*/;	// Change Active area
-	touchscreen_config.yhiclip = T9_YHICLIP/*15*/;
-	touchscreen_config.jumplimit = T9_JUMPLIMIT/*30*/;
+	touchscreen_config.ctrl = T9_CTRL;
+	touchscreen_config.movhysti = T9_MOVHYSTI;
+	touchscreen_config.movhystn = T9_MOVHYSTN;
+	touchscreen_config.mrghyst = T9_MRGHYST;
+	touchscreen_config.mrgthr = T9_MRGTHR;
+	touchscreen_config.amphyst = T9_AMPHYST;
+	touchscreen_config.yloclip = T9_YLOCLIP;
+	touchscreen_config.yhiclip = T9_YHICLIP;
+	touchscreen_config.jumplimit = T9_JUMPLIMIT;
 	touchscreen_config.xpitch = T9_XPITCH;
 	touchscreen_config.ypitch =  T9_YPITCH;
 	touchscreen_config.nexttchdi =  T9_NEXTTCHDI;
@@ -1360,7 +1217,7 @@ void qt_Multitouchscreen_Init(void)
 	touchscreen_config.orient = T9_ORIENT;
 	touchscreen_config.mrgtimeout = T9_MRGTIMEOUT;
 	touchscreen_config.numtouch= T9_NUMTOUCH;
-	touchscreen_config.xrange = T9_XRANGE;    // 902 = (98.2/87.1) * 800
+	touchscreen_config.xrange = T9_XRANGE;
 	touchscreen_config.yrange = T9_YRANGE;
 	touchscreen_config.xloclip = T9_XLOCLIP;
 	touchscreen_config.xhiclip = T9_XHICLIP;
@@ -1373,16 +1230,6 @@ void qt_Multitouchscreen_Init(void)
 		dbg("[QT602240] Configuration Fail!!! , Line %d \n", __LINE__);
 	dbg_func_out();
 }
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 void qt_KeyArray_Init(void)
 {
@@ -1408,16 +1255,6 @@ void qt_KeyArray_Init(void)
 	dbg_func_out();
 }
 
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 void qt_ComcConfig_Init(void)
 {
 	dbg_func_in();
@@ -1435,16 +1272,6 @@ void qt_ComcConfig_Init(void)
 	}
 	dbg_func_out();
 }
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 void qt_Gpio_Pwm_Init(void)
 {
@@ -1474,16 +1301,6 @@ void qt_Gpio_Pwm_Init(void)
 		dbg("[QT602240] Configuration Fail!!! , Line %d \n", __LINE__);
 	dbg_func_out();
 }
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 void qt_Proximity_Config_Init(void)
 {
@@ -1545,16 +1362,6 @@ void qt_One_Touch_Gesture_Config_Init(void)
 	dbg_func_out();
 }
 
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 void qt_Selftest_Init(void)
 {
 	dbg_func_in();
@@ -1571,18 +1378,6 @@ void qt_Selftest_Init(void)
 	}
 	dbg_func_out();
 }
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * 2011-01-19 10:29:00
- * MXT224E 
- *
- * ***************************************************************************/
 
 void qt_Grip_Suppression_T40_Config_Init(void)
 {
@@ -1742,15 +1537,6 @@ static void reset_touch_config(void)
 	qt_Noisesuppression_T48_config_Init();
 }
 
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint8_t reset_chip(void)
 {
 	uint8_t data = 1u;
@@ -1860,16 +1646,6 @@ uint8_t calibrate_chip(void)
 	return ret;
 }
 
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint8_t diagnostic_chip(uint8_t mode)
 {
 	uint8_t status;
@@ -1883,16 +1659,6 @@ uint8_t diagnostic_chip(uint8_t mode)
 	//dbg_func_out();
 	return(status);
 }
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 uint8_t backup_config(void)
 {
@@ -1915,16 +1681,6 @@ uint8_t write_power_config(gen_powerconfig_t7_config_t cfg) {
 	return rc;
 }
 
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint8_t write_acquisition_config(gen_acquisitionconfig_t8_config_t cfg)
 {
 	uint8_t rc;
@@ -1933,16 +1689,6 @@ uint8_t write_acquisition_config(gen_acquisitionconfig_t8_config_t cfg)
 	dbg_func_out();
 	return rc;
 }
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 uint8_t write_multitouchscreen_config(uint8_t instance, touch_multitouchscreen_t9_config_t cfg)
 {
@@ -1989,8 +1735,7 @@ uint8_t write_multitouchscreen_config(uint8_t instance, touch_multitouchscreen_t
 	*(tmp + 33) = cfg.ypitch;
 	*(tmp + 34) = cfg.nexttchdi;
 
-	object_address = get_object_address(TOUCH_MULTITOUCHSCREEN_T9,
-			instance);
+	object_address = get_object_address(TOUCH_MULTITOUCHSCREEN_T9,instance);
 
 	if (object_address == 0)
 		return(CFG_WRITE_FAILED);
@@ -2004,16 +1749,6 @@ uint8_t write_multitouchscreen_config(uint8_t instance, touch_multitouchscreen_t
 
 }
 
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint8_t write_keyarray_config(uint8_t instance, touch_keyarray_t15_config_t cfg)
 {
 	uint8_t rc;
@@ -2022,16 +1757,6 @@ uint8_t write_keyarray_config(uint8_t instance, touch_keyarray_t15_config_t cfg)
 	dbg_func_out();
 	return rc;
 }
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 uint8_t write_comc_config(uint8_t instance, spt_comcconfig_t18_config_t cfg)
 {
@@ -2042,17 +1767,6 @@ uint8_t write_comc_config(uint8_t instance, spt_comcconfig_t18_config_t cfg)
 	return rc;
 }
 
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint8_t write_gpio_config(uint8_t instance, spt_gpiopwm_t19_config_t cfg)
 {
 	uint8_t rc;
@@ -2061,17 +1775,6 @@ uint8_t write_gpio_config(uint8_t instance, spt_gpiopwm_t19_config_t cfg)
 	dbg_func_out();
 	return rc;
 }
-
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 uint8_t write_proximity_config(uint8_t instance, touch_proximity_t23_config_t cfg)
 {
@@ -2111,8 +1814,7 @@ uint8_t write_proximity_config(uint8_t instance, touch_proximity_t23_config_t cf
 	*(tmp + 13) = (uint8_t) (cfg.mvdthr & 0x00FF);
 	*(tmp + 14) = (uint8_t) (cfg.mvdthr >> 8);
 
-	object_address = get_object_address(TOUCH_PROXIMITY_T23,
-			instance);
+	object_address = get_object_address(TOUCH_PROXIMITY_T23,instance);
 
 	if (object_address == 0)
 	{
@@ -2179,15 +1881,6 @@ uint8_t write_onetouchgesture_config(uint8_t instance, proci_onetouchgestureproc
 	return(status);
 }
 
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint8_t write_selftest_config(uint8_t instance, spt_selftest_t25_config_t cfg)
 {
 
@@ -2215,8 +1908,7 @@ uint8_t write_selftest_config(uint8_t instance, spt_selftest_t25_config_t cfg)
 
 	*(tmp + 0) = cfg.ctrl;
 	*(tmp + 1) = cfg.cmd;
-	object_address = get_object_address(SPT_SELFTEST_T25,
-			instance);
+	object_address = get_object_address(SPT_SELFTEST_T25,instance);
 
 	if (object_address == 0)
 	{
@@ -2229,21 +1921,6 @@ uint8_t write_selftest_config(uint8_t instance, spt_selftest_t25_config_t cfg)
 	dbg_func_out();
 	return(status);
 }
-
-
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- *  MXT224E 
- *
- * ***************************************************************************/
-
 
 uint8_t write_gripsuppression_T40_config(proci_gripsuppression_t40_config_t cfg)
 {
@@ -2344,16 +2021,6 @@ uint8_t  write_noisesuppression_t48_config(procg_noisesuppression_t48_config_t c
 	return(status);
 }
 
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint8_t write_simple_config(uint8_t object_type, uint8_t instance, void *cfg)
 {
 	uint16_t object_address;
@@ -2377,17 +2044,6 @@ uint8_t write_simple_config(uint8_t object_type, uint8_t instance, void *cfg)
 	//dbg_func_out();
 	return rc; 
 }
-
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 uint8_t get_object_size(uint8_t object_type)
 {
@@ -2419,15 +2075,6 @@ uint8_t get_object_size(uint8_t object_type)
 	//dbg_func_out();
 	return(size);
 }
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 uint8_t type_to_report_id(uint8_t object_type, uint8_t instance)
 {
@@ -2464,16 +2111,6 @@ uint8_t type_to_report_id(uint8_t object_type, uint8_t instance)
 	return rc;
 }
 
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint8_t report_id_to_type(uint8_t report_id, uint8_t *instance)
 {
 	uint8_t rc;
@@ -2494,17 +2131,6 @@ uint8_t report_id_to_type(uint8_t report_id, uint8_t *instance)
 
 	return rc;
 }
-
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 uint8_t read_id_block(info_id_t *id)
 {
@@ -2551,16 +2177,6 @@ read_id_block_exit:
 	return status;
 }
 
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint16_t get_object_address(uint8_t object_type, uint8_t instance)
 {
 	uint8_t object_table_index = 0;
@@ -2598,17 +2214,6 @@ uint16_t get_object_address(uint8_t object_type, uint8_t instance)
 	return(address);
 }
 
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
-
 uint32_t get_stored_infoblock_crc()
 {
 	uint32_t crc;
@@ -2621,16 +2226,6 @@ uint32_t get_stored_infoblock_crc()
 	dbg_func_out();
 	return(crc);
 }
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 uint8_t calculate_infoblock_crc(uint32_t *crc_pointer)
 {
@@ -2686,16 +2281,6 @@ calculate_infoblock_crc_exit:
 	dbg_func_out();
 	return rc;
 }
-
-
-/*****************************************************************************
- *
- *  FUNCTION
- *  PURPOSE
- *  INPUT
- *  OUTPUT
- *
- * ***************************************************************************/
 
 uint32_t CRC_24(uint32_t crc, uint8_t byte1, uint8_t byte2)
 {
@@ -2792,8 +2377,7 @@ void quantum_touch_probe(void)
 	}
 
 #ifdef CHIP_NOINIT
-	object_address = get_object_address(TOUCH_MULTITOUCHSCREEN_T9,
-			0);
+	object_address = get_object_address(TOUCH_MULTITOUCHSCREEN_T9,0);
 
 	status = read_U16(object_address+18, &xres);
 	status = read_U16(object_address+20, &yres);
@@ -3060,10 +2644,11 @@ uint8_t init_touch_driver(void)
 
 void  clear_event(uint8_t clear)
 {
-	uint8_t valid_input_count=0;
-	int i;   
+	//uint8_t valid_input_count=0;
+	int i;	 
 
 	dbg_func_in();
+
 	for ( i= 0; i<MAX_NUM_FINGER; i++ )
 	{
 		if(fingerInfo[i].mode == TSC_EVENT_WINDOW)
@@ -3073,23 +2658,22 @@ void  clear_event(uint8_t clear)
 			fingerInfo[i].mode = TSC_EVENT_NONE;
 			fingerInfo[i].status= -1;
 		}
-		else{
+		/*else{
 			valid_input_count++;
-		}
+		}*/
 	}
-	input_report_key(qt602240_data->input_dev, BTN_TOUCH, !!valid_input_count);  // mirinae_ICS
-	dbg("[TOUCH] touch event num => %d\n",valid_input_count);
+	input_report_key(qt602240_data->input_dev, BTN_TOUCH, 0);  // mirinae_ICS
+	dbg("[QT602240] clear BTN_TOUCH up");
 	input_sync(qt602240_data->input_dev);
 
 	for ( i= 0; i<MAX_NUM_FINGER; i++ )
 	{
-		if((fingerInfo[i].mode == TSC_EVENT_MENU) || (fingerInfo[i].mode == TSC_EVENT_HOME) || (fingerInfo[i].mode == TSC_EVENT_BACK) )  // p11223
+		if((fingerInfo[i].mode == TSC_EVENT_MENU) || (fingerInfo[i].mode == TSC_EVENT_HOME) || (fingerInfo[i].mode == TSC_EVENT_BACK))
 		{
 			input_report_key(qt602240_data->input_dev, keyInfo[i].code, 0);
-                     input_sync(qt602240_data->input_dev);
 		}
 	}
-	
+	input_sync(qt602240_data->input_dev);
 
 	if(clear == TSC_CLEAR_ALL)
 	{
@@ -3099,10 +2683,11 @@ void  clear_event(uint8_t clear)
 			fingerInfo[i].status = -1;
 			fingerInfo[i].area = 0;
 			keyInfo[i].update = false; 
-		}     
+		}	  
 	}
 	dbg_func_out();
 }
+
 
 void cal_maybe_good(void)
 {    
@@ -3125,6 +2710,7 @@ void cal_maybe_good(void)
 #ifdef TCHAUTOCAL_AFTER_CALIBRATING
 			calibrationStatus.cal_check_flag = 2;
 			mod_timer(&waterdrop_protection_disable_timer, jiffies + msecs_to_jiffies(10000));
+
 #endif
 			if (disable_recovery_algorithm() != WRITE_MEM_OK) {
 				return;
@@ -3407,6 +2993,7 @@ int8_t get_touch_antitouch_info(void) {
 	uint8_t i;
 	uint8_t j;
 	uint8_t x_line_limit;
+	U8 return_val = 0u;
 	int ret = 0;
 
 	dbg_func_in();
@@ -3420,7 +3007,11 @@ int8_t get_touch_antitouch_info(void) {
 
 	/* get touch flags from the chip using the diagnostic object */
 	/* write command to command processor to get touch flags - 0xF3 Command required to do this */
-	write_mem(command_processor_address + DIAGNOSTIC_OFFSET, 1, &data_byte);
+	return_val = write_mem(command_processor_address + DIAGNOSTIC_OFFSET, 1, &data_byte);
+	
+	if(return_val != WRITE_MEM_OK)
+		printk("[QT602240][ERROR]T6_COMMAND_PROCESSOR!!\n");
+	
 	/* get the address of the diagnostic object so we can get the data we need */
 	diag_address = get_object_address(DEBUG_DIAGNOSTIC_T37,0);
 
@@ -3719,23 +3310,24 @@ void get_message(struct work_struct * p)
 #endif
 
 			dbg("[QT602240] %d, %x /x = %ld, y = %ld / size = %d\n", id, quantum_msg[1], x, y, size );
+			//printk("[QT602240] %d, %x /x = %ld, y = %ld / size = %d\n", id, quantum_msg[1], x, y, size );
 		}
 
 		else
 		{
 			press = 3;
 
-/*#if defined(CONFIG_SKY_EF39S_BOARD) 
+/*#if defined(CONFIG_PANTECH_EF39S_BOARD) 
 			A = 9;
 			B = 10;
 			C = 120;
 			D = 10;
-#elif defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD) 
+#elif defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) 
 			A = 9;
 			B = 10;
 			C = 100;
 			D = 15;
-#elif defined(CONFIG_SKY_EF65L_BOARD)
+#elif defined(CONFIG_PANTECH_EF65L_BOARD)
 			A = 9;
 			B = 10;
 			C = 110;
@@ -3922,12 +3514,129 @@ void report_release (report_finger_info_t fingerInfo) {
 	input_report_abs(qt602240_data->input_dev, ABS_MT_TRACKING_ID, -1);
 //	input_mt_sync(qt602240_data->input_dev);
 }
+/*
+void report_input(void) {
+	int i;
+	for ( i= 0; i<MAX_NUM_FINGER; i++ )
+	{
+		if ( fingerInfo[i].status == -1 || (fingerInfo[i].mode == TSC_EVENT_NONE && fingerInfo[i].status == 0))  {
+			fingerInfo[i].status= -1;
+			continue;
+		}
+
+		//dbg("[QT602240] XY:(%d, %d) id:%d status:%d\n", fingerInfo[i].x, fingerInfo[i].y, fingerInfo[i].id, fingerInfo[i].status);
+		printk	("[QT602240] XY:(%d, %d) id:%d status:%d\n", fingerInfo[i].x, fingerInfo[i].y, fingerInfo[i].id, fingerInfo[i].status);
+		// Initial Touch
+		if(fingerInfo[i].mode == TSC_EVENT_NONE) {
+			// Normal Touch
+			if(fingerInfo[i].y < SCREEN_RESOLUTION_Y) {
+				report_fingerInfo(fingerInfo[i]);
+				fingerInfo[i].mode = TSC_EVENT_WINDOW;
+			}
+			// Button Touch
+#ifdef HAS_BUTTONS
+			else if(fingerInfo[i].y >= TOUCH_KEY_Y)
+			{
+				// Menu button touch 
+				if(fingerInfo[i].x >= TOUCH_MENU_MIN && fingerInfo[i].x <= TOUCH_MENU_MAX)
+				{
+					fingerInfo[i].mode = TSC_EVENT_MENU;
+					keyInfo[i].code = KEY_MENU;
+					keyInfo[i].status = 1;
+					keyInfo[i].update = true;
+				}
+				// Home button touch 
+				else if(fingerInfo[i].x >= TOUCH_HOME_MIN && fingerInfo[i].x <= TOUCH_HOME_MAX)	
+				{
+					fingerInfo[i].mode = TSC_EVENT_HOME;          
+					keyInfo[i].code = KEY_HOME;
+					keyInfo[i].status = 1;
+					keyInfo[i].update = true;
+				}
+				// Back button touch 
+				else if(fingerInfo[i].x >= TOUCH_BACK_MIN && fingerInfo[i].x <= TOUCH_BACK_MAX)	
+				{
+					fingerInfo[i].mode = TSC_EVENT_BACK;          
+					keyInfo[i].code = KEY_BACK;
+					keyInfo[i].status = 1;
+					keyInfo[i].update = true;
+				}
+			}
+#endif
+		}
+		// Secondary Touch
+		else
+		{
+			// UP
+			if (fingerInfo[i].status == 0) { 
+				if(fingerInfo[i].mode == TSC_EVENT_WINDOW) {
+					fingerInfo[i].y = MIN(SCREEN_RESOLUTION_Y-1, fingerInfo[i].y);
+					report_release(fingerInfo[i]);
+					fingerInfo[i].mode = TSC_EVENT_NONE;
+				}
+#ifdef HAS_BUTTONS
+				else if(fingerInfo[i].mode == TSC_EVENT_MENU || 
+						fingerInfo[i].mode == TSC_EVENT_HOME || 
+						fingerInfo[i].mode == TSC_EVENT_BACK){
+					keyInfo[i].status = 0;
+					keyInfo[i].update = true;
+					fingerInfo[i].mode = TSC_EVENT_NONE;
+				}
+#endif
+			}
+			// Move 
+			else 
+			{
+				if(fingerInfo[i].mode == TSC_EVENT_WINDOW) {
+					fingerInfo[i].y = MIN(SCREEN_RESOLUTION_Y-1, fingerInfo[i].y);
+					report_fingerInfo_move(fingerInfo[i]);
+				}
+#ifdef HAS_BUTTONS
+				else {
+					if(fingerInfo[i].status == 1 && (fingerInfo[i].y >= SCREEN_RESOLUTION_Y && fingerInfo[i].y < TOUCH_KEY_Y)) {
+						dbg("Move Key area to null key area\n");
+						keyInfo[i].status = 0;
+						keyInfo[i].update = true;
+						fingerInfo[i].mode = TSC_EVENT_NONE;
+					}
+					else {
+						continue;
+					}
+				}
+#endif
+			}
+		}
+		if(fingerInfo[i].status == 0) 
+			fingerInfo[i].status= -1;
+	} // for ( i= 0; i<MAX_NUM_FINGER; i++ )
+
+#ifdef HAS_BUTTONS
+	// Update Keys
+	for( i= 0; i<MAX_NUM_FINGER; i++)
+	{
+		if(keyInfo[i].update) {
+			dbg("[QT602240]BUTTON KEY_CODE:%d PRESSED:%d\n", keyInfo[i].code, keyInfo[i].status);
+			input_report_key(qt602240_data->input_dev, keyInfo[i].code, keyInfo[i].status);
+			keyInfo[i].update = false;
+		}
+	}
+#endif
+
+	// Count fingers
+	finger_cnt = 0;
+	for (i = 0 ; i < MAX_NUM_FINGER; ++i) {
+		if (fingerInfo[i].status == -1)
+			continue;
+		finger_cnt++;
+	}
+
+	input_report_abs(qt602240_data->input_dev, BTN_TOUCH, !!finger_cnt);
+	input_sync(qt602240_data->input_dev);
+}
+*/
 void report_input (void) {
 	int i;
 	int valid_input_count=0;
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-  	int prevx = 0, nextx = 0;
-#endif
 	
 	for ( i= 0; i<MAX_NUM_FINGER; i++ )	{
 		if ( fingerInfo[i].status == -1 || (fingerInfo[i].mode == TSC_EVENT_NONE && fingerInfo[i].status == 0)) 
@@ -3944,102 +3653,29 @@ void report_input (void) {
 			// Button Touch
 #ifdef HAS_BUTTONS 
 			else if(fingerInfo[i].y >= TOUCH_KEY_Y){
-				/* Menu button touch */
+				// Menu button touch 
 				if(fingerInfo[i].x >= TOUCH_MENU_MIN && fingerInfo[i].x <= TOUCH_MENU_MAX) {
 					fingerInfo[i].mode = TSC_EVENT_MENU;
 					keyInfo[i].code = KEY_MENU;
 					keyInfo[i].status = TOUCH_EVENT_PRESS;
 					keyInfo[i].update = true;
 				}
-			    /* Home button touch */
+				// Home button touch 
 				else if(fingerInfo[i].x >= TOUCH_HOME_MIN && fingerInfo[i].x <= TOUCH_HOME_MAX)	{
 					fingerInfo[i].mode = TSC_EVENT_HOME;          
-					keyInfo[i].code = KEY_HOMEPAGE;
+					keyInfo[i].code = KEY_HOME;
 					keyInfo[i].status = TOUCH_EVENT_PRESS;
 					keyInfo[i].update = true;
 				}
-				/* Back button touch */
+				// Back button touch 
 				else if(fingerInfo[i].x >= TOUCH_BACK_MIN && fingerInfo[i].x <= TOUCH_BACK_MAX) {
 					fingerInfo[i].mode = TSC_EVENT_BACK;          
 					keyInfo[i].code = KEY_BACK;
 					keyInfo[i].status = TOUCH_EVENT_PRESS;
 					keyInfo[i].update = true;
 				}
-#if defined (CONFIG_MACH_MSM8960_RACERJ) || defined (CONFIG_MACH_MSM8960_STARQ)
-				else if(fingerInfo[i].x >= TOUCH_SEARCH_MIN && fingerInfo[i].x <= TOUCH_SEARCH_MAX)	{
-					fingerInfo[i].mode = TSC_EVENT_SEARCH;          
-					keyInfo[i].code = KEY_SEARCH;
-					keyInfo[i].status = 1;
-					keyInfo[i].update = true;
-				}
-#endif // defined (CONFIG_MACH_MSM8960_RACERJ) || defined (CONFIG_MACH_MSM8960_STARQ)
 			}
 #endif // HAS_TOUCH_KEY
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-			//left -> right
-			if ((s2w_switch > 0) && (scr_suspended == true) && (ts->finger_count == 1)) {
-				prevx = 0;
-				nextx = 333;
-				if ((barrier[0] == true) ||
-				   ((ts->finger_data[loop_i].x > prevx) &&
-				    (ts->finger_data[loop_i].x < nextx) &&
-				    (ts->finger_data[loop_i].y > 950))) {
-					if ((led_exec_count == true) && (scr_on_touch == false) && (s2w_switch == 2)) {
-						pm8058_drvx_led_brightness_set(sweep2wake_leddev, 255);
-						printk(KERN_INFO "[sweep2wake]: activated button backlight.\n");
-						led_exec_count = false;
-					}
-					prevx = 333;
-					nextx = 667;
-					barrier[0] = true;
-					if ((barrier[1] == true) ||
-					   ((ts->finger_data[loop_i].x > prevx) &&
-					    (ts->finger_data[loop_i].x < nextx) &&
-					    (ts->finger_data[loop_i].y > 950))) {
-						prevx = 667;
-						barrier[1] = true;
-						if ((ts->finger_data[loop_i].x > prevx) &&
-						    (ts->finger_data[loop_i].y > 950)) {
-							if (exec_count) {
-								printk(KERN_INFO "[sweep2wake]: POWER ON.\n");
-								sweep2wake_pwrtrigger();
-								exec_count = false;
-								break;
-							}
-						}
-					}
-				}
-			//right -> left
-			} else if ((s2w_switch > 0) && (scr_suspended == false) && (ts->finger_count == 1)) {
-				scr_on_touch=true;
-				prevx = 1000;
-				nextx = 667;
-				if ((barrier[0] == true) ||
-				   ((ts->finger_data[loop_i].x < prevx) &&
-			    	    (ts->finger_data[loop_i].x > nextx) &&
-				    (ts->finger_data[loop_i].y > 950))) {
-					prevx = 667;
-					nextx = 333;
-					barrier[0] = true;
-					if ((barrier[1] == true) ||
-					   ((ts->finger_data[loop_i].x < prevx) &&
-					    (ts->finger_data[loop_i].x > nextx) &&
-					    (ts->finger_data[loop_i].y > 950))) {
-						prevx = 333;
-						barrier[1] = true;
-						if ((ts->finger_data[loop_i].x < prevx) &&
-						    (ts->finger_data[loop_i].y > 950)) {
-							if (exec_count) {
-								printk(KERN_INFO "[sweep2wake]: POWER OFF.\n");
-								sweep2wake_pwrtrigger();
-								exec_count = false;
-								break;
-							}
-						}
-					}
-				}
-			}
-#endif
 			valid_input_count++;
 		}
 		// Secondary Touch
@@ -4068,7 +3704,6 @@ void report_input (void) {
 			else if(fingerInfo[i].status == TOUCH_EVENT_MOVE && fingerInfo[i].mode == TSC_EVENT_WINDOW)
 			{
 				fingerInfo[i].y = MIN(SCREEN_RESOLUTION_Y-1, fingerInfo[i].y);
-				//if(fingerInfo[i].y>(SCREEN_RESOLUTION_Y-1)) fingerInfo[i].y=SCREEN_RESOLUTION_Y-1;	
 				report_fingerInfo_move(fingerInfo[i]);
 				fingerInfo[i].status= 1;
 				valid_input_count++;
@@ -4097,14 +3732,14 @@ void report_input (void) {
 	input_sync(qt602240_data->input_dev);
 
 #ifdef HAS_BUTTONS
-	// Update Keys
 	for( i= 0; i<MAX_NUM_FINGER; i++)
 	{
-		if(keyInfo[i].update) {
+		if(keyInfo[i].update)
+		{
 			dbg("[QT602240]BUTTON KEY_CODE:%d PRESSED:%d\n", keyInfo[i].code, keyInfo[i].status);
 			input_report_key(qt602240_data->input_dev, keyInfo[i].code, keyInfo[i].status);
-			keyInfo[i].update = false;	  
-                     input_sync(qt602240_data->input_dev);
+			keyInfo[i].update = false;
+	  		input_sync(qt602240_data->input_dev);
 		}
 	}
 #endif //HAS_TOUCH_KEY
@@ -4119,6 +3754,60 @@ void report_input (void) {
 
 }
 
+
+#ifdef PANTECH_MHL_TOUCH_EVENT
+
+void pantech_mhl_touch_handler()
+{
+	//dbg_func_in();
+	disable_irq_nosync(qt602240_data->client->irq);
+	
+
+	queue_work(qt602240_wq, &qt602240_data->work_mhl_touch_event);
+	//dbg_func_out();
+}
+
+void pantech_mhl_touch_func(struct work_struct * p)
+{
+	//unsigned long x, y;
+	uint8_t id = 0;
+	//int size = 0;
+
+//	clear_event(TSC_CLEAR_ALL);
+
+	/* Get the lock */
+	mutex_lock(&qt602240_data->lock);
+
+
+	//clear
+	input_mt_slot(qt602240_data->input_dev, 0);
+	input_report_abs(qt602240_data->input_dev, ABS_MT_TRACKING_ID, -1);
+	input_report_key(qt602240_data->input_dev, BTN_TOUCH, 0);
+	input_sync(qt602240_data->input_dev);
+
+	id = 0;
+	fingerInfo[id].x = 1;
+	fingerInfo[id].y = 1;
+	fingerInfo[id].area= 0;	
+	fingerInfo[id].id = id;
+	
+	report_fingerInfo (fingerInfo[0]);	
+	input_report_key(qt602240_data->input_dev, BTN_TOUCH, 1);  
+	input_sync(qt602240_data->input_dev);
+
+	
+	report_release(fingerInfo[0]);
+	input_report_key(qt602240_data->input_dev, BTN_TOUCH, 0);  
+	input_sync(qt602240_data->input_dev);
+
+	enable_irq(qt602240_data->client->irq);
+	mutex_unlock(&qt602240_data->lock);
+
+	return ;
+}
+
+EXPORT_SYMBOL(pantech_mhl_touch_handler);
+#endif
 
 /*------------------------------ I2C Driver block -----------------------------------*/
 #define I2C_M_WR 0 /* for i2c */
@@ -4135,7 +3824,7 @@ int qt602240_i2c_write(u16 reg, u8 *read_val, unsigned int len)
 
 	if(len+2 > I2C_MAX_SEND_LENGTH)
 	{
-		dbg("[TSP][ERROR] %s() data length error\n", __FUNCTION__);
+		dbg("[QT602240][ERROR] %s() data length error\n", __FUNCTION__);
 		return -ENODEV;
 	}
 
@@ -4143,10 +3832,12 @@ int qt602240_i2c_write(u16 reg, u8 *read_val, unsigned int len)
 	wmsg.flags = I2C_M_WR;
 	wmsg.len = len + 2;
 	wmsg.buf = data;
+
 	data[0] = reg & 0x00ff;
 	data[1] = reg >> 8;
 
-	for (i = 0; i < len; i++){
+	for (i = 0; i < len; i++)
+	{
 		data[i+2] = *(read_val+i);
 	}
 
@@ -4164,7 +3855,7 @@ int boot_qt602240_i2c_write(u16 reg, u8 *read_val, unsigned int len)
 	int ret,i;
 
 	if(len+2 > I2C_MAX_SEND_LENGTH) {
-		dbg("[TSP][ERROR] %s() data length error\n", __FUNCTION__);
+		dbg("[QT602240][ERROR] %s() data length error\n", __FUNCTION__);
 		return -ENODEV;
 	}
 
@@ -4193,7 +3884,8 @@ int qt602240_i2c_read(u16 reg,unsigned char *rbuf, int buf_size)
 
 	rmsg.addr = qt602240_data->client->addr;
 
-	if(first_read == 1)	{
+	if(first_read == 1)
+	{
 		first_read = 0;
 		address_pointer = reg+1;
 	}
@@ -4201,6 +3893,7 @@ int qt602240_i2c_read(u16 reg,unsigned char *rbuf, int buf_size)
 	if((address_pointer != reg) || (reg != message_processor_address))
 	{
 		address_pointer = reg;
+
 		rmsg.flags = I2C_M_WR;
 		rmsg.len = 2;
 		rmsg.buf = data;
@@ -4257,9 +3950,7 @@ U8 boot_read_mem(U16 start, U8 size, U8 *mem)
 U8 read_U16(U16 start, U16 *mem)
 {
 	U8 status;
-
 	status = read_mem(start, 2, (U8 *) mem);
-
 	return status;
 }
 
@@ -4270,7 +3961,10 @@ U8 write_mem(U16 start, U8 size, U8 *mem)
 
 	ret = qt602240_i2c_write(start,mem,size);
 	if(ret < 0) 
+	{
+		printk("[QT602240][ERROR] write_mem = %d!!\n",ret);
 		rc = WRITE_MEM_FAILED;
+	}
 	else
 		rc = WRITE_MEM_OK;
 
@@ -4285,7 +3979,7 @@ U8 boot_write_mem(U16 start, U16 size, U8 *mem)
 	dbg_func_in();
 
 	ret = boot_qt602240_i2c_write(start,mem,size);
-	if(ret < 0){
+	if(ret < 0) {
 		dbg("boot write mem fail: %d \n",ret);
 		rc = WRITE_MEM_FAILED;
 	}
@@ -4307,16 +4001,16 @@ U8 boot_write_mem(U16 start, U16 size, U8 *mem)
  *  OUTPUT
  *
  * ***************************************************************************/
-
 void write_message_to_usart(uint8_t msg[], uint8_t length)
 {
 	int i;
 	dbg_func_in();
 
-	for (i=0; i < length; i++){
-		dbg("0x%02x ", msg[i]);
+	for (i=0; i < length; i++)
+	{
+		dbg_raw("0x%02x ", msg[i]);
 	}
-	dbg("\n\r");
+	dbg_raw("\n\r");
 
 	dbg_func_out();
 }
@@ -4379,23 +4073,7 @@ static int qt602240_early_suspend(struct early_suspend *h)
 {
 	dbg_func_in();
 
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-    	scr_suspended = true;
-	if (s2w_switch > 0) {
-		enable_irq_wake(client->irq);
-		printk(KERN_INFO "[sweep2wake]: suspend but keep interupt wake going.\n");
-		if (s2w_switch == 2) {
-			//ensure backlight is turned off
-			pm8058_drvx_led_brightness_set(sweep2wake_leddev, 0);
-			printk(KERN_INFO "[sweep2wake]: deactivated button backlight.\n");
-		}
- 	} else {
-#endif
 	disable_irq(qt602240_data->client->irq);
-	
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-	}
-#endif
 
 	cancel_delayed_work_sync(&qt602240_data->work_autocalibration_disable);
 	del_timer(&waterdrop_protection_disable_timer);
@@ -4410,14 +4088,8 @@ static int qt602240_early_suspend(struct early_suspend *h)
 	del_timer(&noise_remove_state_timer);
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-  	if (s2w_switch == 0) {
-#endif
 	qt_Power_Sleep();
 	clear_event(TSC_CLEAR_ALL);
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
- 	}
-#endif
 	dbg_func_out();
 	return 0;
 }
@@ -4425,18 +4097,6 @@ static int qt602240_early_suspend(struct early_suspend *h)
 static int  qt602240_late_resume(struct early_suspend *h)
 {
 	dbg_func_in();
-	
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-	scr_suspended = false;
-	if (s2w_switch > 0) {
-    		disable_irq_wake(qt602240_data->client->irq);
-		printk(KERN_INFO "[sweep2wake]: resume but disable interupt wake.\n");
-  	}
-#endif
-
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-	if (s2w_switch == 0) {
-#endif
 	touch_data_init();
 
 	qt_Power_Config_Init();
@@ -4444,29 +4104,11 @@ static int  qt602240_late_resume(struct early_suspend *h)
 	previous_charger_mode = -1;
 	qt_charger_mode_config(current_charger_mode);
 #endif 
-
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-  	}
-#endif
-
 #ifdef ANTI_TOUCH_HOLE
 	queue_delayed_work(qt602240_wq, &qt602240_data->work_anti_touch_hole, msecs_to_jiffies(1000));
 #endif 
 	calibrate_chip();
-	
-
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-  	if (s2w_switch == 0) {
-#endif
 	enable_irq(qt602240_data->client->irq);
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-  	}
-	
-	if (s2w_switch_changed == true) {
-		s2w_switch = s2w_temp;
-		s2w_switch_changed = false;
-	}
-#endif
 	dbg_func_out();
 	return 0;
 }
@@ -4479,14 +4121,16 @@ static int __devinit qt602240_probe(struct i2c_client *client, const struct i2c_
 	int rc;
 	dbg_func_in();
 	qt602240_data = kzalloc(sizeof(struct qt602240_data_t), GFP_KERNEL);
-	if (!qt602240_data){
+	if (qt602240_data == NULL)
+	{
 		pr_err("qt602240_data is not NULL.\n");
 		return -ENOMEM;
 	}
 	qt602240_data->client = client;
 
 	qt602240_wq = create_singlethread_workqueue("qt602240_wq");
-	if (!qt602240_wq){
+	if (!qt602240_wq)
+	{
 		pr_err("create_singlethread_workqueue(qt602240_wq) error.\n");
 		return -ENOMEM;
 	}
@@ -4503,11 +4147,6 @@ static int __devinit qt602240_probe(struct i2c_client *client, const struct i2c_
 		pr_err("Failed to create device file(%s)!\n", dev_attr_i2c.attr.name);
 	if (device_create_file(ts_dev, &dev_attr_setup) < 0)
 		pr_err("Failed to create device file(%s)!\n", dev_attr_setup.attr.name);
-		
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
-	if (device_create_file(ts_dev, &dev_attr_sweep2wake) < 0)
-		pr_err("Failed to create device file(%s)!\n", dev_attr_sweep2wake.attr.name);
-#endif
 
 	dbg("ts_dev creation : success.\n");
 
@@ -4546,6 +4185,10 @@ static int __devinit qt602240_probe(struct i2c_client *client, const struct i2c_
 	noise_remove_state_timer.data = 0;
 #endif
 
+#ifdef PANTECH_MHL_TOUCH_EVENT
+	INIT_WORK(&qt602240_data->work_mhl_touch_event,pantech_mhl_touch_func);
+#endif
+
 	qt602240_data->input_dev = input_allocate_device();
 	if (qt602240_data->input_dev == NULL)
 	{
@@ -4555,19 +4198,22 @@ static int __devinit qt602240_probe(struct i2c_client *client, const struct i2c_
 	}
 
 	qt602240_data->input_dev->name = "qt602240_ts_input";
+
+	set_bit(INPUT_PROP_DIRECT, qt602240_data->input_dev->propbit);		// JB Update 
+
 	set_bit(EV_SYN, qt602240_data->input_dev->evbit);
 	set_bit(EV_KEY, qt602240_data->input_dev->evbit);
 	set_bit(BTN_TOUCH, qt602240_data->input_dev->keybit);
 
 	set_bit(KEY_MENU, qt602240_data->input_dev->keybit);
-	set_bit(KEY_HOMEPAGE, qt602240_data->input_dev->keybit);
+	set_bit(KEY_HOME, qt602240_data->input_dev->keybit);
 	set_bit(KEY_BACK, qt602240_data->input_dev->keybit);
 
 	set_bit(EV_ABS, qt602240_data->input_dev->evbit);
 
 #ifdef SKY_PROCESS_CMD_KEY
 	set_bit(KEY_SEARCH, qt602240_data->input_dev->keybit);
-	set_bit(KEY_HOMEPAGE, qt602240_data->input_dev->keybit);
+
 	set_bit(KEY_0, qt602240_data->input_dev->keybit);
 	set_bit(KEY_1, qt602240_data->input_dev->keybit);
 	set_bit(KEY_2, qt602240_data->input_dev->keybit);
@@ -4591,6 +4237,7 @@ static int __devinit qt602240_probe(struct i2c_client *client, const struct i2c_
 	set_bit(KEY_UP, qt602240_data->input_dev->keybit);
 	set_bit(KEY_DOWN, qt602240_data->input_dev->keybit);
 	set_bit(KEY_ENTER, qt602240_data->input_dev->keybit);
+
 	set_bit(KEY_SEND, qt602240_data->input_dev->keybit);
 	set_bit(KEY_END, qt602240_data->input_dev->keybit);
 	set_bit(KEY_F1, qt602240_data->input_dev->keybit);
@@ -4605,8 +4252,7 @@ static int __devinit qt602240_probe(struct i2c_client *client, const struct i2c_
 	set_bit(KEY_CAMERA, qt602240_data->input_dev->keybit);
 	//    set_bit(KEY_HOLD, qt602240_data->input_dev->keybit);
 #endif // SKY_PROCESS_CMD_KEY
-
-  input_mt_init_slots(qt602240_data->input_dev, MAX_NUM_FINGER);  											// PROTOCOL_B
+	input_mt_init_slots(qt602240_data->input_dev, MAX_NUM_FINGER);
 	input_set_abs_params(qt602240_data->input_dev, ABS_X, 0, SCREEN_RESOLUTION_X, 0, 0);
 	input_set_abs_params(qt602240_data->input_dev, ABS_Y, 0, SCREEN_RESOLUTION_Y, 0, 0);
 	input_set_abs_params(qt602240_data->input_dev, ABS_PRESSURE, 0, 255, 0, 0);
@@ -4624,7 +4270,7 @@ static int __devinit qt602240_probe(struct i2c_client *client, const struct i2c_
 		goto err_input_register_device_failed;
 	}
 	dbg("input_register_device : success.\n");
-
+	
 	touch_monitor_init();	
 
 	mutex_init(&qt602240_data->lock);
@@ -4652,7 +4298,8 @@ static int __devinit qt602240_probe(struct i2c_client *client, const struct i2c_
 		dbg("request_irq : success.\n");
 		dbg("qt602240_probe: Start touchscreen %s\n", qt602240_data->input_dev->name);
 	}
-	else{
+	else
+	{
 		printk("[QT602240]request_irq failed : %d\n", rc);
 	}
 
@@ -4666,11 +4313,9 @@ static int __devinit qt602240_probe(struct i2c_client *client, const struct i2c_
 #ifdef SKY_PROCESS_CMD_KEY
 	rc = misc_register(&touch_event);
 	if (rc) {
-		pr_err("::::::::: can''t register touch_fops\n");
+		pr_err("::::::::: can''t register touch_fops, err : %d\n",rc);
 	}
-#endif //SKY_PROCESS_CMD_KEY    
-
-
+#endif    
 	dbg_func_out();
 	return 0;
 
@@ -4685,6 +4330,13 @@ err_input_dev_alloc_failed:
 }
 
 #ifdef ITO_TYPE_CHECK
+      struct pm8xxx_mpp_config_data sky_touch_analog_adc = {
+                      .type   = PM8XXX_MPP_TYPE_A_INPUT,
+                    .level    = PM8XXX_MPP_AIN_AMUX_CH5,
+                      .control = PM8XXX_MPP_AOUT_CTRL_DISABLE,
+              };
+
+
 // Read ADC Value (Platform dependent codes)
 static int check_analog_mpp(int channel,int *mv_reading)                   // read adc value 
 {
@@ -4740,19 +4392,13 @@ int init_hw_setting(void)
 	unsigned gpioConfig;
 	struct regulator *vreg_touch_3_3;
 	struct regulator *vreg_touch_1_8;
-#if (defined(CONFIG_SKY_EF40K_BOARD)||defined(CONFIG_SKY_EF40S_BOARD)) && (BOARD_REV >= WS20)
+#if (defined(CONFIG_PANTECH_EF40K_BOARD)||defined(CONFIG_PANTECH_EF40S_BOARD))// && (BOARD_REV >= WS20)
 	struct regulator *vreg_lvs2b_1_8;
-#endif       
-// N1037 20120329 for ICS 
-     struct pm8xxx_mpp_config_data sky_touch_analog_adc = {
-		.type	= PM8XXX_MPP_TYPE_A_INPUT, 
-        .level	= PM8XXX_MPP_AIN_AMUX_CH5,
-		.control = PM8XXX_MPP_AOUT_CTRL_DISABLE,	
-	};	
+#endif
 	dbg_func_in();
 
 	// Init 1.8V regulator
-#if defined(CONFIG_SKY_EF39S_BOARD) || defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD) || defined(CONFIG_SKY_EF65L_BOARD)
+#if defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD)
 	vreg_touch_1_8 = regulator_get(NULL, "8058_s3");
 #elif defined(CONFIG_PANTECH_PRESTO_BOARD) || defined(CONFIG_PANTECH_QUANTINA_BOARD)
 	vreg_touch_1_8 = regulator_get(NULL, "8058_l20");
@@ -4760,19 +4406,19 @@ int init_hw_setting(void)
 
 	if (IS_ERR(vreg_touch_1_8)) {
 		rc = PTR_ERR(vreg_touch_1_8);
-		printk(KERN_ERR "[QT602240]%s: regulator get of %s failed (%d)\n",
+		printk(KERN_ERR "[QT602240] %s: regulator get of %s failed (%d)\n",
 				__func__, "vreg_touch_1_8", rc);
 	}
 
 	rc = regulator_set_voltage(vreg_touch_1_8, 1800000, 1800000);
 	if (rc) {
-		printk(KERN_ERR "[QT602240]%s: vreg set level failed (%d)\n", __func__, rc);
+		printk(KERN_ERR "[QT602240] %s: vreg set level failed (%d)\n", __func__, rc);
 		return 1;
 	}
 	rc = regulator_enable(vreg_touch_1_8);
-	printk("[QT602240]8058_s3 regulator_enable return:  %d \n", rc);
-	
-#if (defined(CONFIG_SKY_EF40K_BOARD)||defined(CONFIG_SKY_EF40S_BOARD)) && (BOARD_REV >= TP20)
+	dbg("8058_s3 regulator_enable return:  %d \n", rc);
+
+#if (defined(CONFIG_PANTECH_EF40K_BOARD)||defined(CONFIG_PANTECH_EF40S_BOARD))// && (BOARD_REV >= TP20)
 	gpio_request(GPIO_TOUCH_ENABLE2_Vdd, "touch_enable2_DVdd");
 	gpioConfig = GPIO_CFG(GPIO_TOUCH_ENABLE2_Vdd, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
 	rc = gpio_tlmm_config(gpioConfig, GPIO_CFG_ENABLE);
@@ -4784,21 +4430,21 @@ int init_hw_setting(void)
 	regulator_put(vreg_touch_1_8);
 #endif
 
-#if (defined(CONFIG_SKY_EF40K_BOARD)||defined(CONFIG_SKY_EF40S_BOARD)) && (BOARD_REV >= WS20)
+#if (defined(CONFIG_PANTECH_EF40K_BOARD)||defined(CONFIG_PANTECH_EF40S_BOARD))// && (BOARD_REV >= WS20)
 	vreg_lvs2b_1_8 = regulator_get(NULL, "8901_lvs2");
 	if (IS_ERR(vreg_lvs2b_1_8)) {
 		rc = PTR_ERR(vreg_lvs2b_1_8);
 		printk(KERN_ERR "[QT602240]%s: regulator get of %s failed (%d)\n",
 				__func__, "vreg_lvs2b_1_8", rc);
 	}
-	
+
 	rc = regulator_enable(vreg_lvs2b_1_8);
-	printk("[QT602240]8901 LVS2 regulator_enable return:  %d \n", rc);
+	dbg("8901 LVS2 regulator_enable return:  %d \n", rc);
 	regulator_put(vreg_lvs2b_1_8);
 #endif
 
 	// Init 3.3V regulator
-#if defined(CONFIG_SKY_EF39S_BOARD) || defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD) || defined(CONFIG_SKY_EF65L_BOARD)
+#if defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD)
 	vreg_touch_3_3 = regulator_get(NULL, "8058_l2");
 #elif defined(CONFIG_PANTECH_PRESTO_BOARD) || defined(CONFIG_PANTECH_QUANTINA_BOARD)
 	vreg_touch_3_3 = regulator_get(NULL, "8058_l17");
@@ -4810,15 +4456,15 @@ int init_hw_setting(void)
 				__func__, "vreg_touch_power", rc);
 	}
 
-		rc = regulator_set_voltage(vreg_touch_3_3, 3300000, 3300000);
+	rc = regulator_set_voltage(vreg_touch_3_3, 3300000, 3300000);
 
 	if (rc) {
 		printk(KERN_ERR "[QT602240]%s: vreg set level failed (%d)\n", __func__, rc);
 		return 1;
 	}
 	rc = regulator_enable(vreg_touch_3_3);
-	printk("[QT602240]Touch Power regulator_enable return:  %d \n", rc);
-#if (defined(CONFIG_SKY_EF40K_BOARD)||defined(CONFIG_SKY_EF40S_BOARD)) && (BOARD_REV >= TP20)
+	dbg("Touch Power regulator_enable return:  %d \n", rc);
+#if (defined(CONFIG_PANTECH_EF40K_BOARD)||defined(CONFIG_PANTECH_EF40S_BOARD)) //&& (BOARD_REV >= TP20)
 	gpio_request(GPIO_TOUCH_ENABLE1_AVdd, "touch_enable1_AVdd");
 	gpioConfig = GPIO_CFG(GPIO_TOUCH_ENABLE1_AVdd, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
 	rc = gpio_tlmm_config(gpioConfig, GPIO_CFG_ENABLE);
@@ -4831,7 +4477,7 @@ int init_hw_setting(void)
 #endif
 
 	// Init Reset GPIO 
-#if defined(CONFIG_SKY_EF39S_BOARD) || defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD) || defined(CONFIG_SKY_EF65L_BOARD) || defined(CONFIG_PANTECH_QUANTINA_BOARD)
+#if defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD) || defined(CONFIG_PANTECH_QUANTINA_BOARD)
 	gpio_request(GPIO_TOUCH_RST, "touch_rst_n");
 	gpioConfig = GPIO_CFG(GPIO_TOUCH_RST, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA);
 
@@ -4855,7 +4501,7 @@ int init_hw_setting(void)
 
 	//Get Color Information
 #ifdef ITO_TYPE_CHECK
-#if  defined (CONFIG_SKY_EF65L_BOARD)	// pz2123
+#if  defined (CONFIG_PANTECH_EF65L_BOARD)	// pz2123
 	//pm8058_mpp_config_analog_input(XOADC_MPP_6,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE); 	// N1037 20120329 for ICS 
 	sky_touch_analog_adc.level = PM8XXX_MPP_AIN_AMUX_CH5;
 	pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_10), &sky_touch_analog_adc);	
@@ -4864,17 +4510,16 @@ int init_hw_setting(void)
 	sky_touch_analog_adc.level = PM8XXX_MPP_AIN_AMUX_CH7;
 	pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_10), &sky_touch_analog_adc);
 #else 	
-	//pm8058_mpp_config_analog_input(XOADC_MPP_6,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE); 	// N1037 20120329 for ICS 
-    sky_touch_analog_adc.level = PM8XXX_MPP_AIN_AMUX_CH5;
-    pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_6), &sky_touch_analog_adc);	
-	check_analog_mpp(CHANNEL_ADC_HDSET, &adc_value);// read analog input 
-	//pm8058_mpp_config_analog_input(XOADC_MPP_6,PM_MPP_AIN_AMUX_CH7, PM_MPP_AOUT_CTL_DISABLE); // reset MPP AMUX Setting
-	sky_touch_analog_adc.level = PM8XXX_MPP_AIN_AMUX_CH7;
-    pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_6), &sky_touch_analog_adc);
 
-//	pm8058_mpp_config_analog_input(XOADC_MPP_6,PM_MPP_AIN_AMUX_CH7, PM_MPP_AOUT_CTL_DISABLE);
-//	check_analog_mpp(CHANNEL_ADC_TOUCH_ID, &adc_value);// read analog input 
 	
+	sky_touch_analog_adc.level = PM8XXX_MPP_AIN_AMUX_CH5;
+	pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_6), &sky_touch_analog_adc);
+	check_analog_mpp(CHANNEL_ADC_HDSET, &adc_value);// read analog input
+
+	sky_touch_analog_adc.level = PM8XXX_MPP_AIN_AMUX_CH7;       
+	pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_6), &sky_touch_analog_adc);
+
+
 #endif
 	for(i = 0; i < number_of_elements(ito_table); i++) {
 		if(adc_value >= ito_table[i].min && adc_value <= ito_table[i].max) {
@@ -4883,10 +4528,11 @@ int init_hw_setting(void)
 		}
 	}
 	if (tsp_ito_type >= 0) {
-		printk("[TSP] Color: %d (adc value:%d)\n", tsp_ito_type, adc_value);
+		printk("[QT602240] Color: %d (adc value:%d)\n", tsp_ito_type, adc_value);
+        //dbg("[QT602240] Color: %d (adc value:%d)\n", tsp_ito_type, adc_value);
 	}
 	else {
-		printk("[TSP] ERROR! undefined ito type.\n");
+		printk("[QT602240] ERROR! undefined ito type.\n");
 	}
 #endif
 	dbg_func_out();
@@ -4897,13 +4543,13 @@ void off_hw_setting(void)
 	int rc; 
 	struct regulator *vreg_touch_3_3;
 	struct regulator *vreg_touch_1_8;
-#if defined(CONFIG_SKY_EF40K_BOARD) && (BOARD_REV >= WS20)
+#if defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) // && (BOARD_REV >= WS20)
 	struct regulator *vreg_lvs2b_1_8;
 #endif
 	dbg_func_in();
 
 	// Init 3.3V regulator
-#if defined(CONFIG_SKY_EF39S_BOARD) || defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD)  || defined (CONFIG_SKY_EF65L_BOARD)
+#if defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD)  || defined (CONFIG_PANTECH_EF65L_BOARD)
 	vreg_touch_3_3 = regulator_get(NULL, "8058_l2");
 #elif defined(CONFIG_PANTECH_PRESTO_BOARD) || defined(CONFIG_PANTECH_QUANTINA_BOARD)
 	vreg_touch_3_3 = regulator_get(NULL, "8058_l17");
@@ -4916,11 +4562,11 @@ void off_hw_setting(void)
 	}
 
 	rc = regulator_disable(vreg_touch_3_3);
-	printk("[QT602240]Touch Power regulator_disable return:  %d \n", rc);
+	dbg("Touch Power regulator_disable return:  %d \n", rc);
 	regulator_put(vreg_touch_3_3);
 
 	// Init 1.8V regulator
-#if defined(CONFIG_SKY_EF39S_BOARD) || defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD) || defined (CONFIG_SKY_EF65L_BOARD)
+#if defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined (CONFIG_PANTECH_EF65L_BOARD)
 	vreg_touch_1_8 = regulator_get(NULL, "8058_s3");
 #elif defined(CONFIG_PANTECH_PRESTO_BOARD) || defined(CONFIG_PANTECH_QUANTINA_BOARD)
 	vreg_touch_1_8 = regulator_get(NULL, "8058_l20");
@@ -4933,9 +4579,9 @@ void off_hw_setting(void)
 	}
 
 	rc = regulator_disable(vreg_touch_1_8);
-	printk("[QT602240]8058_s3 regulator_disable return:  %d \n", rc);
+	dbg("8058_s3 regulator_disable return:  %d \n", rc);
 	regulator_put(vreg_touch_1_8);
-#if defined(CONFIG_SKY_EF40K_BOARD) && (BOARD_REV >= WS20)
+#if defined(CONFIG_PANTECH_EF40K_BOARD)  || defined(CONFIG_PANTECH_EF40S_BOARD) //&& (BOARD_REV >= WS20)
 	vreg_lvs2b_1_8 = regulator_get(NULL, "8901_lvs2");
 	if (IS_ERR(vreg_lvs2b_1_8)) {
 		rc = PTR_ERR(vreg_lvs2b_1_8);
@@ -4943,7 +4589,7 @@ void off_hw_setting(void)
 				__func__, "vreg_lvs2b_1_8", rc);
 	}
 	rc = regulator_disable(vreg_lvs2b_1_8);
-	printk("[QT602240]8901 LVS2 regulator_disable return:  %d \n", rc);
+	dbg("8901 LVS2 regulator_disable return:  %d \n", rc);
 	regulator_put(vreg_lvs2b_1_8);
 #endif
 	gpio_free(GPIO_TOUCH_RST);
@@ -4954,7 +4600,9 @@ void off_hw_setting(void)
 	//msleep(100);
 
 }
-void  qt602240_front_test_init(void)
+
+// Reset Touch 
+void  qt602240_front_test_init(void) 
 {
 	disable_irq(qt602240_data->client->irq);
 
@@ -5022,7 +4670,7 @@ static ssize_t gpio_store(
 void TSP_Restart(void)
 {
 	dbg_func_in();
-#if defined(CONFIG_SKY_EF39S_BOARD) || defined(CONFIG_SKY_EF40K_BOARD) || defined(CONFIG_SKY_EF40S_BOARD) || defined(CONFIG_SKY_EF65L_BOARD) || defined(CONFIG_PANTECH_QUANTINA_BOARD)
+#if defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD) || defined(CONFIG_PANTECH_QUANTINA_BOARD)
 	gpio_set_value(GPIO_TOUCH_RST, 0);
 	dbg("TOUCH_RST Low.\n");
 
@@ -5075,7 +4723,7 @@ uint8_t QT_Boot(bool withReset)
 	uint8_t			data = 0xA5;
 	uint8_t			reset_result = 0;
 	unsigned char	*firmware_data;
-       
+
 	firmware_data = QT602240_firmware;
 
 	dbg_func_in();
@@ -5095,7 +4743,8 @@ uint8_t QT_Boot(bool withReset)
 			}
 			dbg("write_mem(RESET_OFFSET) : fail.\n");
 		}
-		else{
+		else
+		{
 			dbg("write_mem(RESET_OFFSET) : fail.\n");
 		}
 
@@ -5193,11 +4842,11 @@ void QT_reprogram(void)
 		return;
 
 	status = read_mem(3, 1, (void *) &build);
-	if (status != READ_MEM_OK) printk("[TSP]ERROR!");
+	if (status != READ_MEM_OK) printk("[QT602240]ERROR!");
 	dbg("familybuild_id = 	0x%x\n",build);
 
 	status = read_mem(2, 1, (void *) &version);
-	if (status != READ_MEM_OK) printk("[TSP]ERROR!");
+	if (status != READ_MEM_OK) printk("[QT602240]ERROR!");
 	dbg("version = 		0x%x\n",version);
 
 	// mXT224E	
@@ -5207,7 +4856,7 @@ void QT_reprogram(void)
 	// mXT224
 	else
 	{
-		printk("[TSP]ERROR!!! : (%d) %s\n", __LINE__, __func__);
+		printk("[QT602240]ERROR!!! : (%d) %s\n", __LINE__, __func__);
 		if((version < 0x20)||((version == 0x20)&&(build != 0xAA)))
 		{
 			dbg("Enter to new firmware : ADDR = Other Version\n");
@@ -5246,16 +4895,18 @@ int __init qt602240_init(void)
 
 	dbg_func_in();
 	rc = init_hw_setting();
-	if(rc<0){
-		printk("[QT602240]qt602240 : init_hw_setting failed. (rc=%d)\n", rc);
+	if(rc<0)
+	{
+		printk("[QT602240]init_hw_setting failed. (rc=%d)\n", rc);
 		return rc;
 	}
 	dbg("i2c_add_driver\n");
 	rc = i2c_add_driver(&qt602240_driver);
-	dbg("rc=%d\n", rc);
 	if(rc)
-		printk("[QT602240]qt602240 : i2c_add_driver failed. (rc=%d)\n", rc);
-	
+	{
+		printk("[QT602240]i2c_add_driver failed. (rc=%d)\n", rc);
+	}
+
 	dbg_func_out();
 	return rc;
 }
@@ -5263,13 +4914,14 @@ int __init qt602240_init(void)
 void __exit qt602240_exit(void)
 {
 	dbg_func_in();
-	
+
 	i2c_del_driver(&qt602240_driver);
 	dbg_func_out();
 	return;
 }
 
 late_initcall(qt602240_init);
+//module_init(qt602240_init);
 module_exit(qt602240_exit);
 
 MODULE_DESCRIPTION("ATMEL qt602240 Touchscreen Driver");

@@ -9,7 +9,7 @@
  */
 
 
-
+#include <asm/atomic.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -24,7 +24,6 @@
 #include <linux/regulator/consumer.h>                   
 #include <linux/regulator/pmic8058-regulator.h>         
 #include <linux/pmic8058-xoadc.h>
-#include <mach/board-msm8660.h>  // N1037 20120330 for ICS 
 
 #include <linux/workqueue.h>
 #include <linux/errno.h>
@@ -33,19 +32,26 @@
 #include <linux/spinlock.h>
 #include <linux/wakelock.h>
 
+#include <linux/irq.h>
+#include <mach/irqs.h>
+#include <linux/mfd/pmic8058.h>
+
+#include <linux/timer.h>
+#include <linux/delay.h>
+
 /* -------------------------------------------------------------------- */
 /* debug option */
 /* -------------------------------------------------------------------- */
 #define EARJACK_DBG
-//#define EARJACK_FUNC_DBG
-
 #ifdef EARJACK_DBG
-#define dbg(fmt, args...)   printk("[earjack] " fmt, ##args)
-#define dbg_without_label(fmt, args...)   printk(fmt, ##args)
+#define dbg(fmt, args...)   pr_debug("[earjack] " fmt, ##args)
+#define dbg_without_label(fmt, args...)   pr_debug(fmt, ##args)
 #else
 #define dbg(fmt, args...)
+#define dbg_without_label(fmt, args...) 
 #endif
 
+#define EARJACK_FUNC_DBG
 #ifdef EARJACK_FUNC_DBG
 #define dbg_func_in()       dbg("++ %s\n", __func__)
 #define dbg_func_out()      dbg("-- %s\n", __func__)
@@ -55,6 +61,53 @@
 #define dbg_func_out() 
 #define dbg_line()     
 #endif
+/* -------------------------------------------------------------------- */
+#if defined (CONFIG_MACH_MSM8X60_EF33S)||defined (CONFIG_MACH_MSM8X60_EF34K)||defined (CONFIG_MACH_MSM8X60_EF34C)||defined (CONFIG_MACH_MSM8X60_EF35L)
+#define EARJACK_POLL_MODE_FEATURE //p12911 : Rc Bad FET Devices
+#endif
+
+#if defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF65L_BOARD)
+#define FEATURE_TOUCH_EARJACK_TEST //TOUCH issue 20111202_kmh_sensor	
+#endif
+
+#ifdef EARJACK_POLL_MODE_FEATURE
+typedef enum{
+	EARJACK_FET_LOW = 0, //dont insert the earjack and the detect pin is low.
+	EARJACK_FET_HIGH = 1, //insert the earjack and the detect pin is high.
+}earjack_state;
+
+//check the earjack 
+typedef enum{ 
+	NONE_EARJACK_INSERTED = 0,
+	POLAR3_EARJACK_INSERTED = 1,
+	POLAR4_EARJACK_INSERTED = 2,
+} earjack_current_type;
+
+typedef struct{
+	earjack_current_type type;
+	uint16_t min;
+	uint16_t max;   
+} Earjack_current_state;
+
+static Earjack_current_state current_earjack_type[] ={                       
+	{ NONE_EARJACK_INSERTED, 2110,	2300},
+	{ POLAR4_EARJACK_INSERTED,1600,  2070},
+	{ POLAR3_EARJACK_INSERTED, 0,  40},    
+};
+earjack_current_type pantech_earjack_type; //3 // 3 and 4 pole check
+
+earjack_state earjack_states=EARJACK_FET_LOW;
+static int earjack_fet_success=0;
+
+#define EARJACK_DETECT_POLLING_TIME					50	// check the earjack timming
+#define EARJACK_CARKIT_EVENT_POLLING_TIME			30	// check the carkit time
+#define EARJACK_REMOTE_KEY_EVENT_POLLING_TIME		3	// 10 sec
+
+static earjack_state earjack_check_det_pin(void);
+static int earjack_poll_check_inserted(void);
+static int is_earjack_insert_by_mpp(void);
+static int check_analog_mpp(int channel,int *mv_reading);
+#endif //EARJACK_POLL_MODE_FEATURE
 /* -------------------------------------------------------------------- */
 
 #define DRIVER_NAME	"pantech_earjack"
@@ -66,13 +119,18 @@
 #define	BIT_HEADSET_SPEAKER_ONLY 	2
 #define	BIT_HEADSET_MIC_ONLY 			4
 
+#define MAX_ADC_READ_COUNT		3
+#define MAX_ADC_VALUE				1000
+
 #define REMOTEKEY_DET_ACTIVE_LOW // select if remoteky_det pin is active low
 
+
 #ifdef EARJACK_DET_ACTIVE_LOW
-#define EARJACK_INSERTED !gpio_get_value_cansleep(EARJACK_DET)
+	#define EARJACK_INSERTED !gpio_get_value_cansleep(EARJACK_DET)
 #else /*EARJACK_ACTIVE_HIGH*/
-#define EARJACK_INSERTED  gpio_get_value_cansleep(EARJACK_DET)
+	#define EARJACK_INSERTED  gpio_get_value_cansleep(EARJACK_DET)
 #endif /*EARJACK_DET_ACTIVE_LOW*/
+
 #define EARJACK_RELEASED !EARJACK_INSERTED
 
 #ifdef REMOTEKEY_DET_ACTIVE_LOW 
@@ -82,6 +140,9 @@
 #endif
 #define REMOTEKEY_RELEASED !REMOTEKEY_PRESSED
 
+#define PM8058_GPIO_BASE						NR_MSM_GPIOS
+#define PM8058_MPP_BASE						(PM8058_GPIO_BASE + PM8058_GPIOS)
+#define PM8058_MPP_PM_TO_SYS(pm_gpio)		(pm_gpio + PM8058_MPP_BASE)
 #define  ARR_SIZE( a )  ( sizeof( (a) ) / sizeof( (a[0]) ) )
 
 typedef enum{
@@ -91,10 +152,7 @@ typedef enum{
 	EARJACK_STATE_CHECK,
 }earjack_type;
 
-#if defined(CONFIG_MIC_BIAS_1_8V)
-#else
 static struct regulator *hs_jack_l8;
-#endif
 
 //static struct regulator *hs_jack_s3;
 
@@ -127,7 +185,16 @@ typedef struct{
 	int max;
 } remotekey;
 
-
+#if defined (CONFIG_MACH_MSM8X60_EF33S) || defined(CONFIG_MACH_MSM8X60_EF34K)||defined (CONFIG_MACH_MSM8X60_EF35L)
+// Default : 2.4V
+static remotekey remotekey_type[] ={ 
+	{ "NO_KEY",		0,			2400,	2600},
+	{ "KEY_MEDIA",		KEY_MEDIA,		45,	130},
+	{ "KEY_VOLUMEDOWN",	KEY_VOLUMEDOWN,		420,	620},
+	{ "KEY_VOLUMEUP",	KEY_VOLUMEUP,		230,	390},
+	{ "KEY_MEDIA_CARKIT",	KEY_MEDIA,		0,	40}, // car_kit - should be on the last position 
+};
+#else
 // Default : 2.7V
 static remotekey remotekey_type[] ={ 
 	{ "NO_KEY",		0,			2400,	2600},
@@ -136,33 +203,136 @@ static remotekey remotekey_type[] ={
 	{ "KEY_VOLUMEUP",	KEY_VOLUMEUP,		250,	420},
 	{ "KEY_MEDIA_CARKIT",	KEY_MEDIA,		0,	50}, // car_kit - should be on the last position 
 };
+#endif
 
 static struct delayed_work earjack_work;
 static struct delayed_work remotekey_work;
 
-int irq_state;
+int irq_detect=0;
+int irq_remote=0;
+int wake_state=0;
+int remotekey_wake=0;
 static void earjack_detect_func(struct work_struct * earjack_work);
 static void remotekey_detect_func(struct work_struct * remotekey_work);
+#ifdef FEATURE_TOUCH_EARJACK_TEST 
+extern void pantech_touch_earjack(int flag);
+#endif
+static void  pm8058_mpp_config_AMUX(void)
+{
+	int ret;
+
+       struct pm8xxx_mpp_config_data sky_handset_analog_adc = {
+			.type	= PM8XXX_MPP_TYPE_A_INPUT,
+			.level	= PM8XXX_MPP_AIN_AMUX_CH5,
+			.control = PM8XXX_MPP_AOUT_CTRL_DISABLE,	
+		};	
+     
+	ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_3), &sky_handset_analog_adc);	
+       
+    	if (ret)
+   		pr_err("%s: pm8058_mpp_config_AMUX ret=%d\n",__func__, ret);	
+}
+static void  pm8058_mpp_config_DIG(void)
+{
+	int ret;
+
+       struct pm8xxx_mpp_config_data sky_handset_digital_adc = {
+			.type	= PM8XXX_MPP_TYPE_D_INPUT,
+			.level	= PM8058_MPP_DIG_LEVEL_S3,
+			.control = PM8XXX_MPP_DIN_TO_INT,	
+		};
+
+	ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_3), &sky_handset_digital_adc);
+
+	if (ret < 0) 
+		pr_err("%s: pm8058_mpp_config_DIG ret=%d\n",__func__, ret);
+}
+static int disable_irq_remote(void)
+{
+	if(irq_remote == 0) {
+		disable_irq_nosync(gpio_to_irq(REMOTEKEY_DET));
+		irq_remote = 1;
+	}else{
+		pr_debug("[EARJACK REMOTE] Already disable irq\n");
+	}	
+	return irq_remote;
+}
+static int enable_irq_remote(void)
+{
+	dbg_func_in();	
+	if(irq_remote == 1) {
+		enable_irq(gpio_to_irq(REMOTEKEY_DET));
+		irq_remote = 0;
+	}else{
+		pr_debug("[EARJACK REMOTE] Already enable irq\n");
+	}	
+	return irq_remote;
+}
+
+
 static void disable_irq_detect(void)
 {
 	dbg_func_in();	
-	if(irq_state == 0) {
+	if(irq_detect == 0) {
 		disable_irq_nosync(gpio_to_irq(EARJACK_DET));
-		irq_state = 1;
+		irq_detect = 1;
 	}else{
-		printk("[EARJACK] Already disable irq\n");
+		pr_debug("[EARJACK DETECT] Already disable irq\n");
 	}	
 }
 static void enable_irq_detect(void)
 {
 	dbg_func_in();	
-	if(irq_state == 1) {
+	if(irq_detect == 1) {
 		enable_irq(gpio_to_irq(EARJACK_DET));
-		irq_state = 0;
+		irq_detect = 0;
 	}else{
-		printk("[EARJACK] Already enable irq\n");
+		pr_debug("[EARJACK DETECT] Already enable irq\n");
 	}	
 }
+void earjack_prevent_suspend(void)
+{
+	dbg_func_in();
+	if(!wake_state)
+		{
+		wake_lock(&earjack_wake_lock);
+		wake_state=1;
+		}
+	dbg_func_out();
+}
+void earjack_allow_suspend(void)
+{
+
+	dbg_func_in();
+	if(wake_state)
+		{
+		wake_unlock(&earjack_wake_lock);
+		wake_state=0;		
+		}
+	dbg_func_out();
+}
+void remotekey_prevent_suspend(void)
+{
+	dbg_func_in();
+	if(!remotekey_wake)
+		{
+		wake_lock(&remotekey_wake_lock);
+		remotekey_wake=1;
+		}
+	dbg_func_out();
+}
+void remotekey_allow_suspend(void)
+{
+
+	dbg_func_in();
+	if(remotekey_wake)
+		{
+		wake_unlock(&remotekey_wake_lock);
+		remotekey_wake=0;		
+		}
+	dbg_func_out();
+}
+
 
 // Switch Device Functions
 static ssize_t msm_headset_print_name(struct switch_dev *sdev, char *buf)
@@ -223,19 +393,17 @@ static struct attribute_group dev_attr_grp = {
 static int __devinit pantech_earjack_probe(struct platform_device *pdev)
 {
 	int rc = 0;
-	int err = 0;
 	struct input_dev *ipdev;
 
 	dbg_func_in();
 
-	irq_state = 0;
 
 	// Alloc Devices
 	earjack = kzalloc(sizeof(struct pantech_earjack), GFP_KERNEL);
 	if (!earjack)
 		return -ENOMEM;
 
-	earjack->sdev.name	= "h2w";
+	earjack->sdev.name	= "hw2";     
 	earjack->sdev.print_name = msm_headset_print_name;
 	rc = switch_dev_register(&earjack->sdev);
 	if (rc)
@@ -258,27 +426,34 @@ static int __devinit pantech_earjack_probe(struct platform_device *pdev)
 
 	// Initialize Work Queue
 	INIT_DELAYED_WORK(&earjack_work,earjack_detect_func);          // INIT WORK
-	INIT_DELAYED_WORK(&remotekey_work,remotekey_detect_func);
+	INIT_DELAYED_WORK( &remotekey_work, remotekey_detect_func );
 
 	// Get Power Source
 	hs_jack_l8 = regulator_get(NULL, "8058_l8");
-	regulator_set_voltage(hs_jack_l8,2700000,2700000);
-
-	dbg("regulator_enable hs_jack_l8 value => %d\n",err);
-
+	
+	if (IS_ERR(hs_jack_l8)) {
+		rc = PTR_ERR(hs_jack_l8);
+		printk(KERN_ERR "%s: regulator get of %s failed (%d)\n",
+			__func__, "hs_jack_l8", rc);
+	}
+	
+	rc = regulator_set_voltage( hs_jack_l8, 2700000, 2700000 );
 	// Initialize Wakelocks
 	wake_lock_init(&earjack_wake_lock, WAKE_LOCK_SUSPEND, "earjack_wake_lock_init");
 	wake_lock_init(&remotekey_wake_lock, WAKE_LOCK_SUSPEND, "remotekey_wake_lock_init");
 
-	// Setup GPIO's
+	// Get GPIO's
 	gpio_request(EARJACK_DET, "earjack_det");
 	gpio_request(REMOTEKEY_DET, "remotekey_det");
 	gpio_tlmm_config(GPIO_CFG(EARJACK_DET, 0, GPIO_CFG_INPUT,GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-	rc = request_irq(gpio_to_irq(EARJACK_DET), Earjack_Det_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "earjack_det-irq", earjack);
+//	gpio_tlmm_config(GPIO_CFG(EARJACK_DET, 0, GPIO_CFG_INPUT,GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+#ifdef EARJACK_POLL_MODE_FEATURE
+	earjack_check_det_pin();
+#endif
 
-	// Warning: REMOTEKEY_DET using default gpio config.
-	//gpio_tlmm_config(GPIO_CFG(REMOTEKEY_DET, 0, GPIO_CFG_INPUT,GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
-	
+	rc = request_irq(gpio_to_irq(EARJACK_DET), Earjack_Det_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING| IRQF_NO_SUSPEND, "earjack_det-irq", earjack);
+
+	// Init Mutex
 	irq_set_irq_wake(gpio_to_irq(EARJACK_DET), 1);
 	irq_set_irq_wake(gpio_to_irq(REMOTEKEY_DET), 1);
 
@@ -311,11 +486,10 @@ static int __devinit pantech_earjack_probe(struct platform_device *pdev)
 		goto err_earjack_init;
 	}
 
+
 	// Scehdule earjack_detect_func for initial detect
 	disable_irq_detect(); //disable_irq_nosync(gpio_to_irq(EARJACK_DET));
-	wake_lock(&earjack_wake_lock);
-	disable_irq_nosync(gpio_to_irq(REMOTEKEY_DET));
-
+	earjack_prevent_suspend();
 	schedule_delayed_work(&earjack_work,10);    // after 100ms
 	
 	dbg_func_out();
@@ -347,68 +521,135 @@ bool is_4pole_earjack (void)
 	retVal = (err>0) ? 1:0;
 	return retVal;
 }
-
-// N1037 20120222 porting  (+) 
-
-static void  pm8058_mpp_config_DIG(void)
+#ifdef EARJACK_POLL_MODE_FEATURE
+bool is_remote_key_low(void) 
 {
-	int ret;
-
-       struct pm8xxx_mpp_config_data sky_earjack_digital_adc = {
-			.type	= PM8XXX_MPP_TYPE_D_INPUT,
-			.level	= PM8058_MPP_DIG_LEVEL_S3,
-			.control = PM8XXX_MPP_DIN_TO_INT,	
-		};
-
-	ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_3), &sky_earjack_digital_adc);
-
-	if (ret < 0) 
-		pr_err("%s: pm8058_mpp_config_DIG ret=%d\n",__func__, ret);
+	bool retVal;
+	int err;
+	if (gpio_cansleep(REMOTEKEY_DET)){
+		err=gpio_get_value_cansleep(REMOTEKEY_DET);
+		dbg("gpio_get_value_cansleep(REMOTEKEY_DET) start\n");                    
+	}else{
+		err=gpio_get_value(REMOTEKEY_DET);
+		dbg("gpio_get_value(REMOTEKEY_DET) start\n");
+	}
+	retVal = (err>0) ? 0:1;
+	return retVal;
+}
+static earjack_state earjack_check_det_pin(void)
+{
+	int ret; //check the gpio 
+	if (gpio_cansleep(EARJACK_DET)){
+		ret=gpio_get_value_cansleep(EARJACK_DET);
+		dbg("gpio_get_value_cansleep(EARJACK_DET) start\n");                    
+	}else{
+		ret=gpio_get_value(EARJACK_DET);
+		dbg("gpio_get_value(EARJACK_DET) start\n");
+	}	
+	if(ret) //inserted the pin and If earjack detect pin is high, FET IC is failed or .
+	{				
+		if(earjack_fet_success) //check the interrupt occured,
+			earjack_states=EARJACK_FET_LOW;				
+		else
+			earjack_states=EARJACK_FET_HIGH;		
+	}
+	else
+	{
+		earjack_states=EARJACK_FET_LOW;
+	}
+	return earjack_states;
 }
 
-static void  pm8058_mpp_config_AMUX(void)
+static int earjack_poll_check_inserted(void)  // detect key sensing                                 
 {
-	int ret;
+	int nAdcValue = 0;
+	int i;
+	int ret=-1;
+	dbg_func_in();
+	check_analog_mpp(CHANNEL_ADC_HDSET,&nAdcValue);             // read analog input mpp_3    
+	for( i = 0; i< ARR_SIZE( current_earjack_type ); i++ ) {																			// set current earjack state
+  	if( nAdcValue >= current_earjack_type[i].min && nAdcValue <= current_earjack_type[i].max ){
+			ret=i;
+			break;
+		}
+	}
+	pr_debug("[EARJACK_POLL_MODE_FEATURE] earjack_poll_check_inserted nAdcValue : %d ret : %d\n", nAdcValue, ret);	
+	dbg_func_out();
+	return ret;
+}
 
-       struct pm8xxx_mpp_config_data sky_earjack_analog_adc = {
-			.type	= PM8XXX_MPP_TYPE_A_INPUT,
-			.level	= PM8XXX_MPP_AIN_AMUX_CH5,
-			.control = PM8XXX_MPP_AOUT_CTRL_DISABLE,	
-		};	
      
-	ret = pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(XOADC_MPP_3), &sky_earjack_analog_adc);	
-       
-    	if (ret)
-   		pr_err("%s: pm8058_mpp_config_AMUX ret=%d\n",__func__, ret);	
+static int is_earjack_insert_by_mpp(void)
+{
+	int state=0;
+	int err=0;
+	int mmp_value=0;
+	//enable the l8 regulator
+	state=regulator_is_enabled(hs_jack_l8);
+	if(state<=0)  err = regulator_enable(hs_jack_l8);	
+	pm8058_mpp_config_AMUX();
+	// read adc value twice 
+	mmp_value = earjack_poll_check_inserted();
+	pm8058_mpp_config_DIG();
+	//disable the l8 regulator	
+	dbg("[EARJACK_POLL_MODE_FEATURE] is_earjack_insert_by_mpp [%d] \n",mmp_value);	
+	if(state<=0)
+	{
+	err=regulator_is_enabled(hs_jack_l8);
+	dbg("[EARJACK_POLL_MODE_FEATURE] REGULATOR (DISABLED)=> %d\n",err);
+	if(err>0) regulator_disable(hs_jack_l8);	
+	}
+	else
+	dbg("[EARJACK_POLL_MODE_FEATURE] REGULATOR [ENABLED] => %d\n",err);		
+	return mmp_value;
 }
-// N1037 20120222 porting (-) 
-
+#endif
 static irqreturn_t Earjack_Det_handler(int irq, void *dev_id)
 {
-	dbg_func_in();
+	//dump_stack();
 	disable_irq_detect(); //disable_irq_nosync(gpio_to_irq(EARJACK_DET));
-	wake_lock(&earjack_wake_lock);
-	schedule_delayed_work(&earjack_work, 10);    // after 100ms start function of earjack_detect_func
+#ifdef EARJACK_POLL_MODE_FEATURE	
+	earjack_fet_success++;
+#endif	
+
+	earjack_prevent_suspend();
+	schedule_delayed_work(&earjack_work, 30);    // after 100ms start function of earjack_detect_func
 	dbg_func_out();
 	return IRQ_HANDLED;
 }
-
 static void earjack_detect_func( struct work_struct *test_earjack)         
 {
 	int err;
+
+#ifdef EARJACK_POLL_MODE_FEATURE					
+	int aflag=0;
+	int need_schdule=0;
+#endif
 	dbg_func_in();
 	dbg("currnet earjack->type: ");
 	switch(earjack->type){
 		case    EARJACK_STATE_OFF : 
 			{
 				dbg_without_label("EARJACK_STATE_OFF\n");
+#ifdef EARJACK_POLL_MODE_FEATURE						
+				if((EARJACK_FET_HIGH == earjack_check_det_pin()) && (earjack_fet_success == 0))
+				{	
+					if(EARJACK_INSERTED){
+						if(is_earjack_insert_by_mpp()) //is insert the 3 pole or 4pole earjack 
+						{
+							need_schdule=0;
+						}else{
+							need_schdule=1;
+							goto poll_end;
+						}							
+					}
+				}
+#endif	
 				if(EARJACK_INSERTED){
 					earjack->type = EARJACK_STATE_CHECK;
 					err=regulator_is_enabled(hs_jack_l8);
 					if(err<=0)  err = regulator_enable(hs_jack_l8);
-					
-					//pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);
-					pm8058_mpp_config_DIG(); // N1037 20120330 for ICS 
+					pm8058_mpp_config_DIG();					
 					schedule_delayed_work(&earjack_work, 5); //50ms
 					// return without enable IRQ, wake_unlock.
 					return;
@@ -426,8 +667,11 @@ static void earjack_detect_func( struct work_struct *test_earjack)
 						earjack->type= EARJACK_STATE_ON_3POLE_CHECK;
 						earjack->mic_on = 0;
 						earjack->hs_on = 1;
-						input_report_switch(earjack->ipdev, SW_HEADPHONE_INSERT,earjack->hs_on);
+						input_report_switch(earjack->ipdev, SW_HEADPHONE_INSERT,earjack->hs_on);						
 						switch_set_state(&earjack->sdev, switch_state());
+#ifdef EARJACK_POLL_MODE_FEATURE												
+						pantech_earjack_type=POLAR3_EARJACK_INSERTED;
+#endif
 						schedule_delayed_work(&earjack_work, 60);   // check if 4pole 600ms
 						// return without enable IRQ, wake_unlock.
 						return;
@@ -436,7 +680,18 @@ static void earjack_detect_func( struct work_struct *test_earjack)
 					else {
 						dbg("4pole headset inserted.\n");
 						earjack->type= EARJACK_STATE_ON;
-						err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "remote_det-irq", earjack);
+#ifdef EARJACK_POLL_MODE_FEATURE						
+						pantech_earjack_type=POLAR4_EARJACK_INSERTED;
+						if((EARJACK_FET_HIGH == earjack_check_det_pin()) && (earjack_fet_success == 0))
+						{
+							err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_FALLING | IRQF_NO_SUSPEND, "remote_det-irq", earjack);
+						}else{
+							err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_NO_SUSPEND, "remote_det-irq", earjack);
+						}
+#else
+						err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_NO_SUSPEND, "remote_det-irq", earjack);
+						
+#endif
 						if(err) 
 							dbg("request_threaded_irq failed\n");
 						earjack->mic_on = 1;
@@ -444,12 +699,25 @@ static void earjack_detect_func( struct work_struct *test_earjack)
 						input_report_switch(earjack->ipdev, SW_MICROPHONE_INSERT,earjack->mic_on); //TODO: NO USE?
 						input_report_switch(earjack->ipdev, SW_HEADPHONE_INSERT,earjack->hs_on);
 						switch_set_state(&earjack->sdev, switch_state());
+#ifdef FEATURE_TOUCH_EARJACK_TEST
+					      pantech_touch_earjack(1); // earjack insert
+#endif					      
+#ifdef EARJACK_POLL_MODE_FEATURE	
+						if((EARJACK_FET_HIGH == earjack_check_det_pin()) && (earjack_fet_success == 0))
+						{	
+								need_schdule=1;
+								goto poll_end;
+							}
+#endif
 					}
 				}
 				else // if EARJACK_RELEASED
 				{
 					earjack->type = EARJACK_STATE_OFF;                
 					dbg("earjack_type: -> EARJACK_STATE_OFF");
+					#ifdef FEATURE_TOUCH_EARJACK_TEST
+					   pantech_touch_earjack(0); // earjack release
+					#endif
 				}
 
 				break; // case EARJACK_STATE_CHECK 
@@ -461,8 +729,14 @@ static void earjack_detect_func( struct work_struct *test_earjack)
 				dbg_without_label("EARJACK_STATE_ON_3POLE_CHECK\n");   
 				if(EARJACK_INSERTED){
 					earjack->type= EARJACK_STATE_ON;                   
+						#ifdef FEATURE_TOUCH_EARJACK_TEST
+					      pantech_touch_earjack(1); // earjack insert
+					    #endif
 					if(!is_4pole_earjack()){
 						dbg("3pole earjack insert.\n");
+#ifdef EARJACK_POLL_MODE_FEATURE												
+						pantech_earjack_type=POLAR3_EARJACK_INSERTED;
+#endif
             			err=regulator_is_enabled(hs_jack_l8);
 						dbg("regulator_is_enabled(hs_jack_l8) value => %d\n",err);
 						if(err>0) regulator_disable(hs_jack_l8);
@@ -472,11 +746,27 @@ static void earjack_detect_func( struct work_struct *test_earjack)
 						earjack->mic_on =1;
 						input_report_switch(earjack->ipdev, SW_MICROPHONE_INSERT,earjack->mic_on);
     						switch_set_state(&earjack->sdev, switch_state());
-						err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "remote_det-irq", earjack);
+#ifdef EARJACK_POLL_MODE_FEATURE						
+						pantech_earjack_type=POLAR4_EARJACK_INSERTED;
+						if((EARJACK_FET_HIGH == earjack_check_det_pin()) && (earjack_fet_success == 0))
+						{
+							err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_FALLING | IRQF_NO_SUSPEND, "remote_det-irq", earjack);
+						}else{
+							err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_NO_SUSPEND, "remote_det-irq", earjack);
+						}
+#else
+						err=request_threaded_irq(gpio_to_irq(REMOTEKEY_DET),NULL,Remotekey_Det_handler,IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_NO_SUSPEND, "remote_det-irq", earjack);
+						
+#endif
 						if(err) dbg("request_threaded_irq failed\n");
-					}                 
+					}
+#ifdef EARJACK_POLL_MODE_FEATURE								
+					if((EARJACK_FET_HIGH == earjack_check_det_pin()) && (earjack_fet_success == 0)){
+						need_schdule=1;			
+					}
+#endif	
 				}
-				else{         
+				else{
 					err=regulator_is_enabled(hs_jack_l8);
 					dbg("regulator_is_enabled(hs_jack_l8) value => %d\n",err);
 					if(err>0) regulator_disable(hs_jack_l8);
@@ -491,8 +781,48 @@ static void earjack_detect_func( struct work_struct *test_earjack)
 		case EARJACK_STATE_ON:   
 			{
 				dbg_without_label("EARJACK_STATE_ON\n");
-				if(EARJACK_RELEASED){
+#ifdef EARJACK_POLL_MODE_FEATURE								
+				if((EARJACK_FET_HIGH == earjack_check_det_pin()) && (earjack_fet_success == 0)){
+					if(EARJACK_INSERTED){
+						need_schdule=1;			
+						if(pantech_earjack_type==POLAR3_EARJACK_INSERTED){ //insert 3POLE
+							dbg("[EARJACK_POLL_MODE_FEATURE] 3 POLE EARJACK_CHECK\n");						
+							if( is_earjack_insert_by_mpp()==0)//disconnect the earjack. 
+							{
+								aflag=1;
+								dbg("3 POLE EARJACK_STATE_RELEASE\n");
+							}
+						}
+						else
+						{
+							if(pantech_earjack_type==POLAR4_EARJACK_INSERTED) //insert 4POLE
+							{
+								dbg("[EARJACK_POLL_MODE_FEATURE] 4 POLE EARJACK_CHECK\n");														
+								disable_irq_nosync(gpio_to_irq(REMOTEKEY_DET));		
+								if(!irq_remote) //Key is pressed, the state does not need to read the adc value.
+								if( is_earjack_insert_by_mpp()==0)//disconnect the earjack. 
+								{
+									aflag=1;
+									dbg("[EARJACK_POLL_MODE_FEATURE] 4 POLE EARJACK_STATE_RELEASE\n");
+								}
+								enable_irq(gpio_to_irq(REMOTEKEY_DET));								
+							}
+						}
+					}
+				}
+				if(EARJACK_RELEASED || aflag){
+#else
+				if(EARJACK_RELEASED){			
+#endif
+#ifdef EARJACK_POLL_MODE_FEATURE								
+					if(earjack_fet_success == 0) {
+						cancel_delayed_work(&remotekey_work);
+					}
+#endif
 					earjack->type = EARJACK_STATE_OFF;
+					#ifdef FEATURE_TOUCH_EARJACK_TEST
+					      pantech_touch_earjack(0); // earjack insert
+					#endif					
 					// if 4pole
 					if (earjack->mic_on) {
 						earjack->mic_on = 0;
@@ -513,25 +843,31 @@ static void earjack_detect_func( struct work_struct *test_earjack)
 							dbg("remote key: %s : %d->%d \n", remotekey_type[earjack->remotekey_index].key_name, !earjack->remotekey_pressed, earjack->remotekey_pressed);
 							input_sync(earjack->ipdev);
 						}                            
-						dbg("earjack_release \n");
+
 
 					}
+					dbg("[EARJACK] EARJACK 3.5 PIPE RELEASE \n");					
 					earjack->hs_on = 0;
 					input_report_switch(earjack->ipdev, SW_HEADPHONE_INSERT,earjack->hs_on);
-    					switch_set_state(&earjack->sdev, switch_state());
+    				switch_set_state(&earjack->sdev, switch_state());
+					dbg("[EARJACK] EARJACK 3.5 PIPE RELEASE END\n");															
 				}
-
 				break;
 			}                    
 		default :   
-			dbg("earjack_detect_func default.\n");
+			printk("Error : P12911 earjack_detect_func default.\n");
+		break;
 	}
+#ifdef EARJACK_POLL_MODE_FEATURE	
+	poll_end :
+	if(need_schdule)
+	schedule_delayed_work(&earjack_work, EARJACK_DETECT_POLLING_TIME); //50ms			
+#endif
 	enable_irq_detect(); //enable_irq(gpio_to_irq(EARJACK_DET));
-	wake_unlock(&earjack_wake_lock);
+	earjack_allow_suspend(); 
 	dbg_func_out();
 	return;
 }
-
 
 static int check_analog_mpp(int channel,int *mv_reading)                   // read adc value 
 {
@@ -576,7 +912,6 @@ out:
 	return -EINVAL;
 }
 
-
 static int adc_value_to_key(void)  // detect key sensing                                 
 {
 	int nAdcValue = 0;
@@ -608,9 +943,11 @@ static irqreturn_t Remotekey_Det_handler(int irq, void *dev_id)                 
 		return IRQ_HANDLED;
 	}
 	// disable_irq, wake_lock
-	disable_irq_nosync(gpio_to_irq(REMOTEKEY_DET));
-	wake_lock(&remotekey_wake_lock);
+	//dump_stack();
+	disable_irq_remote();
+	remotekey_prevent_suspend();
 	schedule_delayed_work(&remotekey_work, 0);
+//	schedule_delayed_work( &remotekey_work, 50 );
 	dbg_func_out();
 	return IRQ_HANDLED;        
 }
@@ -620,18 +957,7 @@ static void remotekey_detect_func(struct work_struct * test_remotekey_work)
 	int key_first=0;
 	int key_second=0;    
 	//	int key_third=0;    
-   	int nAdcValue=0;	
-
 	dbg_func_in();
-    
-       // N1037 20120306 proting 
-	//pm8058_mpp_config_analog_input(XOADC_MPP_3,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE);		// set mpp3 analog mode
-	pm8058_mpp_config_AMUX();
-	check_analog_mpp(CHANNEL_ADC_HDSET,&nAdcValue);      
-       // N1037 20120306 porting 
-	//pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);				// set mpp3 digital mode
-	pm8058_mpp_config_DIG(); 
-    
 	// car kit
 	if(earjack->car_kit ){
 		if(EARJACK_INSERTED){
@@ -644,21 +970,19 @@ static void remotekey_detect_func(struct work_struct * test_remotekey_work)
 			}
 		}		
 		earjack->car_kit = 0; // reset car_kit flag.
-		enable_irq(gpio_to_irq(REMOTEKEY_DET));
-		wake_unlock(&remotekey_wake_lock);
+		enable_irq_remote();
+		remotekey_allow_suspend();
 		dbg_func_out();
 		return ;
 	}
 	// if current state: key not pressed
 	if(!earjack->remotekey_pressed){ 
-		dbg("current state: remotekey not pressed, read adc value. \n");
-		//pm8058_mpp_config_analog_input(XOADC_MPP_3,PM_MPP_AIN_AMUX_CH5, PM_MPP_AOUT_CTL_DISABLE);
-              pm8058_mpp_config_AMUX(); // N1037 20120330 for ICS 
+		dbg("[remotekey_detect_func] current state: remotekey not pressed, read adc value. \n");
+		pm8058_mpp_config_AMUX();
 		// read adc value twice 
-		key_first=adc_value_to_key();
-		key_second=adc_value_to_key(); // after 20ms (adc reading delay)
-		//pm8058_mpp_config_digital_in(XOADC_MPP_3,PM8058_MPP_DIG_LEVEL_S3, PM_MPP_DIN_TO_INT);
-		pm8058_mpp_config_DIG(); // N1037 20120330 for ICS 
+		key_first = adc_value_to_key();
+		key_second = adc_value_to_key(); // after 20ms (adc reading delay)
+		pm8058_mpp_config_DIG();
 
 		// is valid key && earjack inserted 
 		if( (key_first==key_second) && EARJACK_INSERTED){
@@ -667,7 +991,7 @@ static void remotekey_detect_func(struct work_struct * test_remotekey_work)
 			if (earjack->remotekey_index != 0 && !earjack->car_kit)
 			{
 				input_report_key(earjack->ipdev, remotekey_type[earjack->remotekey_index].key_index, earjack->remotekey_pressed);
-				dbg("remote key: %s : %d->%d \n", remotekey_type[earjack->remotekey_index].key_name, !earjack->remotekey_pressed, earjack->remotekey_pressed);
+				printk("remote key: %s : %d->%d \n", remotekey_type[earjack->remotekey_index].key_name, !earjack->remotekey_pressed, earjack->remotekey_pressed);
 			}	
 			else if (earjack->car_kit)
 			{
@@ -687,8 +1011,8 @@ static void remotekey_detect_func(struct work_struct * test_remotekey_work)
 		// else, ignore key
 		else {
 			dbg("igrnore key.\n");
-			enable_irq(gpio_to_irq(REMOTEKEY_DET));
-			wake_unlock(&remotekey_wake_lock);
+			enable_irq_remote();
+			remotekey_allow_suspend();
 			dbg_func_out();
 			return ;
 		}	
@@ -696,14 +1020,27 @@ static void remotekey_detect_func(struct work_struct * test_remotekey_work)
 	// if current state : key pressed
 	else
 	{ 
+#ifdef EARJACK_POLL_MODE_FEATURE		
+		if(earjack_fet_success == 0 && (REMOTEKEY_PRESSED) ){			
+				schedule_delayed_work(&remotekey_work, EARJACK_REMOTE_KEY_EVENT_POLLING_TIME);
+				return;										
+		}
+#endif
 		earjack->remotekey_pressed=0;
 		if (earjack->remotekey_index != 0) 
 			input_report_key(earjack->ipdev, remotekey_type[earjack->remotekey_index].key_index, earjack->remotekey_pressed);
 		dbg("remote key: %s : %d->%d \n", remotekey_type[earjack->remotekey_index].key_name, !earjack->remotekey_pressed, earjack->remotekey_pressed);
 	}        
+#ifdef EARJACK_POLL_MODE_FEATURE								
+	if((earjack_fet_success == 0) && (earjack->remotekey_pressed == 1)){
+		input_sync(earjack->ipdev);	
+		schedule_delayed_work(&remotekey_work, EARJACK_REMOTE_KEY_EVENT_POLLING_TIME);
+		return;
+	}
+#endif
 	input_sync(earjack->ipdev);
-	enable_irq(gpio_to_irq(REMOTEKEY_DET));
-	wake_unlock(&remotekey_wake_lock);
+	enable_irq_remote();
+	remotekey_allow_suspend();	
 	dbg_func_out();
 	return;
 }
@@ -726,12 +1063,39 @@ static int __devexit pantech_earjack_remove(struct platform_device *pdev)
 // Suspend, Resume
 static int pantech_earjack_suspend(struct platform_device * pdev, pm_message_t state)
 {
+
+#ifdef EARJACK_POLL_MODE_FEATURE	
+   	int err;
 	dbg_func_in();
+	if(earjack_states==EARJACK_FET_HIGH &&earjack_fet_success == 0) {
+		cancel_delayed_work_sync(&earjack_work);
+		cancel_delayed_work_sync(&remotekey_work);
+		
+		if(earjack->mic_on != 1){
+			err=regulator_is_enabled(hs_jack_l8);
+			if(err>0){
+				regulator_disable(hs_jack_l8);
+			}
+		}	
+	}	
+#endif
 	return 0;
 }
 static int pantech_earjack_resume(struct platform_device * pdev)
 {
+#ifdef EARJACK_POLL_MODE_FEATURE											
+	int err;
 	dbg_func_in();
+	if(earjack_states==EARJACK_FET_HIGH &&earjack_fet_success == 0) {
+		
+		err = regulator_is_enabled(hs_jack_l8); 
+		if(err<=0) {
+			regulator_enable(hs_jack_l8);
+		}
+		
+		schedule_delayed_work(&earjack_work,10);		
+	}	
+#endif
 	return 0;
 }
 

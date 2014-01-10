@@ -398,9 +398,6 @@ config MSM_RPM
 config MSM_RPM_SMD
 	depends on MSM_SMD
 	bool "Support for using SMD as the transport layer for communicatons with RPM"
-	
-config PANTECH_CAMERA_HW
-	bool "Pantech camera hw"
 
 config MSM_MPM
 	bool "Modem Power Manager"
@@ -876,19 +873,76 @@ config MACH_FSM9XXX_SURF
 	  Support for the Qualcomm FSM9xxx femtocell
 	  chipset based SURF evaluation board and
 	  FFA board.
+
+config MACH_MSM8X60_EF33S
+	depends on ARCH_MSM8X60
+	default n
+	bool "MSM8x60 EF33S"
+	select CUST_PANTECH_H
+	help
+		Support for the Qualcomm MSM8x60 EF33S device.
+
+config MACH_MSM8X60_EF34K
+	depends on ARCH_MSM8X60
+	default n
+	bool "MSM8x60 EF34K"
+	select CUST_PANTECH_H
+	help
+		Support for the Qualcomm MSM8x60 EF34K device.
+
+config MACH_MSM8X60_EF34C
+	depends on ARCH_MSM8X60
+	default n
+	bool "MSM8x60 EF34C"
+	select CUST_PANTECH_H
+	help
+		Support for the Qualcomm MSM8x60 EF34C device.
+
+config MACH_MSM8X60_EF35L
+	depends on ARCH_MSM8X60
+	default n
+	bool "MSM8x60 EF35L"
+	select CUST_PANTECH_H
+	help
+		Support for the Qualcomm MSM8x60 EF35L device.
+
+config MACH_MSM8X60_EF39S
+	depends on ARCH_MSM8X60
+	default n
+	bool "MSM8x60 EF39S"
+	select CUST_PANTECH_H
+	help
+		Support for the Qualcomm MSM8x60 EF39S device.
+
+config MACH_MSM8X60_EF40S
+	depends on ARCH_MSM8X60
+	default n
+	bool "MSM8x60 EF40S"
+	select CUST_PANTECH_H
+	help
+		Support for the Qualcomm MSM8x60 EF40S device.
+
+config MACH_MSM8X60_EF40K
+	depends on ARCH_MSM8X60
+	default n
+	bool "MSM8x60 EF40K"
+	select CUST_PANTECH_H
+	help
+		Support for the Qualcomm MSM8x60 EF40K device.
+
 config MACH_MSM8X60_EF65L
 	depends on ARCH_MSM8X60
-	default y
-	bool "MSM8X60 EF65L"
-	select CUST_SKY_H
+	default n
+	bool "MSM8x60 EF65L"
+	select CUST_PANTECH_H
 	help
-	  Support for the Pantech MSM8x60 EF65L project board. 
+		Support for the Qualcomm MSM8x60 EF65L device.
 
-config CUST_SKY_H
+config CUST_PANTECH_H
 	bool
 
-if CUST_SKY_H
-source "arch/arm/mach-msm/cust_sky/Kconfig"
+if CUST_PANTECH_H
+source "arch/arm/mach-msm/cust/Kconfig"
 endif
 
 endmenu
@@ -1296,7 +1350,7 @@ config MSM_SMD_DEBUG
 	  between the ARM9 and ARM11
 
 config MSM_SDIO_AL
-	depends on ((ARCH_MSM7X30 || MACH_MSM8X60_FUSN_FFA || MACH_TYPE_MSM8X60_FUSION  || MACH_MSM8X60_EF65L) && HAS_WAKELOCK)
+	depends on ((ARCH_MSM7X30 || MACH_MSM8X60_FUSN_FFA || MACH_TYPE_MSM8X60_FUSION || MACH_MSM8X60_EF39S || MACH_MSM8X60_EF40S || MACH_MSM8X60_EF40K || MACH_MSM8X60_EF65L) && HAS_WAKELOCK)
 	default y
 	tristate "SDIO-Abstraction-Layer"
 	help
@@ -1710,14 +1764,12 @@ config MSM_DMA_TEST
 
 config WIFI_CONTROL_FUNC
 	bool "Enable WiFi control function abstraction"
-	default y
 	help
 	  Enables Power/Reset/Carddetect function abstraction
 
 config WIFI_MEM_PREALLOC
 	depends on WIFI_CONTROL_FUNC
 	bool "Preallocate memory for WiFi buffers"
-	default y
 	help
 	  Preallocates memory buffers for WiFi driver
 
@@ -2489,8 +2541,4 @@ config MSM_8X60_FUSION_GPIO_GLITCH
 	help
 	  Enable masking of glitch during boot up, which helps in avoiding unwanted
 	  noise or s/w code from toggling the ap2mdm err fatal.
-	  
-config PANMAC
-	bool "Pantech panmac driver"
-
 endif

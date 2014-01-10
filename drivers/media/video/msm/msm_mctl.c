@@ -544,15 +544,31 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 			goto sensor_sdev_failed;
 		}
 
-		if (p_mctl->act_sdev)
+		if (p_mctl->act_sdev) {
+pr_err("%s: %d /[wsyang_debug] v4l2_subdev_call(p_mctl->act_sdev,core, s_power, 1) \n", __func__, __LINE__);   			
 			rc = v4l2_subdev_call(p_mctl->act_sdev,
 				core, s_power, 1);
+		}
 		if (rc < 0) {
 			pr_err("%s: act power failed:%d\n", __func__, rc);
 			goto act_power_up_failed;
 		}
+#ifdef CONFIG_PANTECH_CAMERA // Case:00871739 : bug fix csiphy reset - jjhwang 2012.06.25.
+        if (p_mctl->csid_sdev) {
+pr_err("%s: %d /[wsyang_debug] VIDIOC_MSM_CSID_INIT \n", __func__, __LINE__);            
+            rc = v4l2_subdev_call(p_mctl->csid_sdev, core, ioctl,
+                VIDIOC_MSM_CSID_INIT, &csid_version);
+            if (rc < 0) {
+                pr_err("%s: csid initialization failed %d\n",
+                    __func__, rc);
+                goto csid_init_failed;
+            }
+            csi_info.is_csic = 0;
+        }
+#endif
 
 		if (p_mctl->csiphy_sdev) {
+pr_err("%s: %d /[wsyang_debug] VIDIOC_MSM_CSIPHY_INIT \n", __func__, __LINE__);   			
 			rc = v4l2_subdev_call(p_mctl->csiphy_sdev, core, ioctl,
 				VIDIOC_MSM_CSIPHY_INIT, NULL);
 			if (rc < 0) {
@@ -561,8 +577,9 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 				goto csiphy_init_failed;
 			}
 		}
-
+#ifndef CONFIG_PANTECH_CAMERA // Case:00871739 : bug fix csiphy reset - jjhwang 2012.06.25.
 		if (p_mctl->csid_sdev) {
+pr_err("%s: %d /[wsyang_debug] VIDIOC_MSM_CSID_INIT \n", __func__, __LINE__);            
 			rc = v4l2_subdev_call(p_mctl->csid_sdev, core, ioctl,
 				VIDIOC_MSM_CSID_INIT, &csid_version);
 			if (rc < 0) {
@@ -572,8 +589,9 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 			}
 			csi_info.is_csic = 0;
 		}
-
+#endif
 		if (p_mctl->csic_sdev) {
+pr_err("%s: %d /[wsyang_debug] VIDIOC_MSM_CSIC_INIT \n", __func__, __LINE__);            
 			rc = v4l2_subdev_call(p_mctl->csic_sdev, core, ioctl,
 				VIDIOC_MSM_CSIC_INIT, &csid_version);
 			if (rc < 0) {
@@ -587,6 +605,7 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 		csi_info.csid_version = csid_version;
 		rc = v4l2_subdev_call(p_mctl->sensor_sdev, core, ioctl,
 				VIDIOC_MSM_SENSOR_CSID_INFO, &csi_info);
+pr_err("%s: %d /[wsyang_debug] VIDIOC_MSM_SENSOR_CSID_INFO \n", __func__, __LINE__);   				
 		if (rc < 0) {
 			pr_err("%s: sensor csi version failed %d\n",
 			__func__, rc);
@@ -595,6 +614,7 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 
 		/* ISP first*/
 		if (p_mctl->isp_sdev && p_mctl->isp_sdev->isp_open) {
+pr_err("%s: %d /[wsyang_debug] isp_sdev->isp_open() \n", __func__, __LINE__);   			
 			rc = p_mctl->isp_sdev->isp_open(
 				p_mctl->isp_sdev->sd, p_mctl);
 			if (rc < 0) {
@@ -605,6 +625,7 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 		}
 
 		if (p_mctl->axi_sdev) {
+pr_err("%s: %d /[wsyang_debug] VIDIOC_MSM_AXI_INIT \n", __func__, __LINE__);   			
 			rc = v4l2_subdev_call(p_mctl->axi_sdev, core, ioctl,
 				VIDIOC_MSM_AXI_INIT, p_mctl);
 			if (rc < 0) {
@@ -615,6 +636,7 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 		}
 
 		if (camdev->is_vpe) {
+pr_err("%s: %d /[wsyang_debug] VIDIOC_MSM_VPE_INIT \n", __func__, __LINE__);   			
 			rc = v4l2_subdev_call(p_mctl->vpe_sdev, core, ioctl,
 				VIDIOC_MSM_VPE_INIT, p_mctl);
 			if (rc < 0) {
@@ -685,47 +707,65 @@ static int msm_mctl_release(struct msm_cam_media_controller *p_mctl)
 		(struct msm_camera_sensor_info *) s_ctrl->sensordata;
 	struct msm_camera_device_platform_data *camdev = sinfo->pdata;
 
+pr_err("%s: [wsyang_debug] / VIDIOC_MSM_SENSOR_RELEASE \n", __func__);
 	v4l2_subdev_call(p_mctl->sensor_sdev, core, ioctl,
 		VIDIOC_MSM_SENSOR_RELEASE, NULL);
 
 	if (p_mctl->csic_sdev) {
+pr_err("%s: [wsyang_debug] / VIDIOC_MSM_CSIC_RELEASE \n", __func__);        
 		v4l2_subdev_call(p_mctl->csic_sdev, core, ioctl,
 			VIDIOC_MSM_CSIC_RELEASE, NULL);
 	}
 
 	if (camdev->is_vpe) {
+pr_err("%s: [wsyang_debug] / VIDIOC_MSM_VPE_RELEASE \n", __func__);        
 		v4l2_subdev_call(p_mctl->vpe_sdev, core, ioctl,
 			VIDIOC_MSM_VPE_RELEASE, NULL);
 	}
 
 	if (p_mctl->axi_sdev) {
+pr_err("%s: [wsyang_debug] / VIDIOC_MSM_AXI_RELEASE \n", __func__);        
 		v4l2_subdev_call(p_mctl->axi_sdev, core, ioctl,
 			VIDIOC_MSM_AXI_RELEASE, NULL);
 	}
 
 	if (p_mctl->isp_sdev && p_mctl->isp_sdev->isp_release)
+pr_err("%s: [wsyang_debug] / isp_release \n", __func__);        
 		p_mctl->isp_sdev->isp_release(p_mctl,
 			p_mctl->isp_sdev->sd);
-
+        
+#ifndef CONFIG_PANTECH_CAMERA // Case:00871739 : bug fix csiphy reset - jjhwang 2012.06.25.
 	if (p_mctl->csid_sdev) {
+pr_err("%s: [wsyang_debug] / VIDIOC_MSM_CSID_RELEASE \n", __func__);        
 		v4l2_subdev_call(p_mctl->csid_sdev, core, ioctl,
 			VIDIOC_MSM_CSID_RELEASE, NULL);
 	}
+#endif
 
 	if (p_mctl->csiphy_sdev) {
+pr_err("%s: [wsyang_debug] / VIDIOC_MSM_CSIPHY_RELEASE \n", __func__);        
 		v4l2_subdev_call(p_mctl->csiphy_sdev, core, ioctl,
 			VIDIOC_MSM_CSIPHY_RELEASE, NULL);
 	}
+#ifdef CONFIG_PANTECH_CAMERA // Case:00871739 : bug fix csiphy reset - jjhwang 2012.06.25.
+    if (p_mctl->csid_sdev) {
+pr_err("%s: [wsyang_debug] / VIDIOC_MSM_CSID_RELEASE \n", __func__);        
+        v4l2_subdev_call(p_mctl->csid_sdev, core, ioctl,
+            VIDIOC_MSM_CSID_RELEASE, NULL);
+    }
+#endif
 
 	pm_qos_update_request(&p_mctl->pm_qos_req_list,
 			PM_QOS_DEFAULT_VALUE);
 	pm_qos_remove_request(&p_mctl->pm_qos_req_list);
 
 	if (p_mctl->act_sdev) {
+pr_err("%s: [wsyang_debug] / act_sdev / s_power \n", __func__);        
 		v4l2_subdev_call(p_mctl->act_sdev, core, s_power, 0);
 		p_mctl->act_sdev = NULL;
 	}
 
+pr_err("%s: [wsyang_debug] / sensor_sdev / s_power \n", __func__);
 	v4l2_subdev_call(p_mctl->sensor_sdev, core, s_power, 0);
 
 	pm_qos_update_request(&p_mctl->idle_pm_qos, PM_QOS_DEFAULT_VALUE);

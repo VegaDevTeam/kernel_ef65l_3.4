@@ -195,11 +195,10 @@ menu "Hardware I/O ports"
 source "drivers/input/serio/Kconfig"
 
 source "drivers/input/gameport/Kconfig"
-
 source "drivers/input/pantech_earjack_int/Kconfig"
-
-# Sensors - N1019 20120418 porting
+### P12095 110301 added ###
 source "drivers/input/sensor/Kconfig"
+
 endmenu
 
 endmenu

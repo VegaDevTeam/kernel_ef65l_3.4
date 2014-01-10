@@ -25,7 +25,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhdioctl.h,v 13.7.8.1.4.1.16.5 2010/05/21 21:49:38 Exp $
+ * $Id: dhdioctl.h,v 13.7.8.1.4.1.16.2.92.2 2010/11/09 03:19:31 Exp $
  */
 
 #ifndef _dhdioctl_h_
@@ -49,6 +49,12 @@ typedef struct dhd_ioctl {
 	uint needed;	/* bytes needed (optional) */
 	uint driver;	/* to identify target driver */
 } dhd_ioctl_t;
+
+/* Underlying BUS definition */
+enum {
+	BUS_TYPE_USB = 0, /* for USB dongles */
+	BUS_TYPE_SDIO /* for SDIO dongles */
+};
 
 /* per-driver magic numbers */
 #define DHD_IOCTL_MAGIC		0x00444944
@@ -79,7 +85,7 @@ typedef struct dhd_ioctl {
 #define DHD_GLOM_VAL	0x0400
 #define DHD_EVENT_VAL	0x0800
 #define DHD_BTA_VAL	0x1000
-#define DHD_ISCAN_VAL 0x2000
+#define DHD_ISCAN_VAL	0x2000
 
 #ifdef SDTEST
 /* For pktgen iovar */
@@ -118,6 +124,5 @@ typedef struct dhd_pktgen {
 
 /* require default structure packing */
 #include <packed_section_end.h>
-
 
 #endif /* _dhdioctl_h_ */

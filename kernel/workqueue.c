@@ -42,6 +42,12 @@
 #include <linux/lockdep.h>
 #include <linux/idr.h>
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+#include <mach/pantech_debug.h> 
+#endif
+#endif
+
 #include "workqueue_sched.h"
 
 enum {
@@ -1863,6 +1869,12 @@ __acquires(&gcwq->lock)
 	lock_map_acquire_read(&cwq->wq->lockdep_map);
 	lock_map_acquire(&lockdep_map);
 	trace_workqueue_execute_start(work);
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_121102
+    if(pantech_debug_enable)
+	    pantechdbg_sched_msg("@%pS", f);
+#endif
+#endif
 	f(work);
 	/*
 	 * While we must be careful to not use "work" after this, the trace

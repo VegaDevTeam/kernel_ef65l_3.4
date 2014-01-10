@@ -123,7 +123,7 @@ endif
 endif
 endif
 endif
-obj-$(CONFIG_MSM_SDIO_TTY) += sdio_tty.o
+obj-$(CONFIG_MSM_SDIO_TTY) += sdio_tty.o sdio_vt.o
 obj-$(CONFIG_MSM_SMD_TTY) += smd_tty.o
 obj-$(CONFIG_MSM_SMD_QMI) += smd_qmi.o
 obj-$(CONFIG_MSM_SMD_PKT) += smd_pkt.o
@@ -234,11 +234,18 @@ obj-$(CONFIG_MSM_WATCHDOG_V2) += msm_watchdog_v2.o
 obj-$(CONFIG_MACH_MSM8X60_RUMI3) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_SIM) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_SURF) += board-msm8x60.o
+obj-$(CONFIG_MACH_MSM8X60_EF33S) += board-msm8x60.o
+obj-$(CONFIG_MACH_MSM8X60_EF34K) += board-msm8x60.o
+obj-$(CONFIG_MACH_MSM8X60_EF34C) += board-msm8x60.o
+obj-$(CONFIG_MACH_MSM8X60_EF35L) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_FFA) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_FLUID) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_DRAGON) += board-msm8x60.o
 obj-$(CONFIG_MACH_TYPE_MSM8X60_FUSION) += board-msm8x60.o mdm.o
 obj-$(CONFIG_MACH_MSM8X60_FUSN_FFA) += board-msm8x60.o mdm.o
+obj-$(CONFIG_MACH_MSM8X60_EF39S) += board-msm8x60.o mdm.o
+obj-$(CONFIG_MACH_MSM8X60_EF40S) += board-msm8x60.o mdm.o
+obj-$(CONFIG_MACH_MSM8X60_EF40K) += board-msm8x60.o mdm.o
 obj-$(CONFIG_MACH_MSM8X60_EF65L) += board-msm8x60.o mdm.o
 obj-$(CONFIG_TROUT_H2W) += board-trout-h2w.o
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
@@ -363,10 +370,7 @@ obj-$(CONFIG_MSM_DCVS) += msm_dcvs_scm.o msm_dcvs.o msm_dcvs_idle.o
 obj-$(CONFIG_MSM_RUN_QUEUE_STATS) += msm_rq_stats.o
 obj-$(CONFIG_MSM_SHOW_RESUME_IRQ) += msm_show_resume_irq.o
 obj-$(CONFIG_BT_MSM_PINTEST)  += btpintest.o
-obj-$(CONFIG_SW_RESET) += sky_sys_reset.o
-obj-$(CONFIG_PANTECH_ERR_CRASH_LOGGING) += pantech_apanic.o sky_sys_reset.o
 obj-$(CONFIG_MSM_FAKE_BATTERY) += fish_battery.o
-obj-$(CONFIG_PANMAC) += panmac.o rpc_nv.o
 obj-$(CONFIG_MSM_RPC_VIBRATOR) += msm_vibrator.o
 obj-$(CONFIG_MSM_NATIVE_RESTART) += restart.o
 obj-$(CONFIG_MSM_MODEM_RESTART) += restart_7k.o
@@ -395,3 +399,7 @@ obj-$(CONFIG_MSM_VP_REGULATOR) += msm_vp.o
 ifdef CONFIG_MSM_CPR
 obj-$(CONFIG_DEBUG_FS) += msm_cpr-debug.o
 endif
+
+obj-$(CONFIG_PANTECH_RESET_REASON) += sky_sys_reset.o
+obj-$(CONFIG_PANTECH_ERR_CRASH_LOGGING) += pantech_restart.o pantech_apanic.o
+obj-$(CONFIG_PANTECH_DEBUG) += pantech_debug.o

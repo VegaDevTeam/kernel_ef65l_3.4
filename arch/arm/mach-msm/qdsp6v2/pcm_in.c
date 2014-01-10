@@ -61,6 +61,11 @@ struct pcm {
 	struct pm_qos_request pm_qos_req;
 };
 
+#ifdef CONFIG_SKYSND_CTRL
+static int pcm_mute_exception;
+static int pcm_in_status;
+static int pcm_offset;
+#endif
 static void pcm_in_get_dsp_buffers(struct pcm*,
 				uint32_t token, uint32_t *payload);
 
@@ -112,6 +117,9 @@ static int pcm_in_enable(struct pcm *pcm)
 {
 	if (atomic_read(&pcm->in_enabled))
 		return 0;
+#ifdef CONFIG_SKYSND_CTRL
+              pcm_in_status=1;
+#endif
 	return q6asm_run(pcm->ac, 0, 0, 0);
 }
 
@@ -119,6 +127,10 @@ static int pcm_in_disable(struct pcm *pcm)
 {
 	int rc = 0;
 
+#ifdef CONFIG_SKYSND_CTRL
+              pcm_in_status=0;
+              pcm_mute_exception=0;
+#endif
 	if (atomic_read(&pcm->in_opened)) {
 		atomic_set(&pcm->in_enabled, 0);
 		atomic_set(&pcm->in_opened, 0);
@@ -415,6 +427,14 @@ static ssize_t pcm_in_read(struct file *file, char __user *buf,
 		}
 		if ((len) && data) {
 			offset = pcm->in_frame_info[idx][1];
+                     #ifdef CONFIG_SKYSND_CTRL  // SangwonLee 110406 To remove camera effect sound.
+                     pcm_offset=(int)(48000/pcm->sample_rate);
+                     if(pcm_mute_exception>=pcm_offset) {
+                        memset(data+offset, 0, size);
+                        //pr_info("%s:Erase Tx data (size:%d, seq:%d, rate:%d)\n", __func__, size, pcm_mute_exception, pcm->sample_rate);
+                        pcm_mute_exception-=pcm_offset;
+                     }
+                     #endif
 			if (copy_to_user(buf, data+offset, len)) {
 				pr_err("%s copy_to_user failed len[%d]\n",
 							__func__, len);
@@ -491,4 +511,20 @@ static int __init pcm_in_init(void)
 	return misc_register(&pcm_in_misc);
 }
 
+#ifdef CONFIG_SKYSND_CTRL
+int get_pcm_in_status(void)
+{
+    return pcm_in_status;
+}
+#if 1//SangwonLee 110330 Right Speaker is near by handset mic. Disable it to prevent recording noise.
+void set_pcm_in_status(void)
+{
+	pcm_in_status=1;
+}
+#endif
+void set_pcm_in_exception(int value)
+{
+    pcm_mute_exception=value;
+}
+#endif
 device_initcall(pcm_in_init);

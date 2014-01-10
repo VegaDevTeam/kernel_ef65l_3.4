@@ -648,11 +648,4 @@ static inline void module_bug_finalize(const Elf_Ehdr *hdr,
 static inline void module_bug_cleanup(struct module *mod) {}
 #endif	/* CONFIG_GENERIC_BUG */
 
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-extern struct pt_regs *__get_regs_crashed(void);
-extern void __save_regs_and_mmu(struct pt_regs *);
-extern void (*arm_crash_reset)(void);
-extern void printcrash(const char *fmt, ...);
-#endif
-
 #endif /* _LINUX_MODULE_H */

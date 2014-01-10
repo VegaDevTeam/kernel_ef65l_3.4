@@ -22,7 +22,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: bcmsdpcm.h,v 1.1.2.4 2010/07/02 01:15:46 Exp $
+ * $Id: bcmsdpcm.h,v 1.1.2.3.20.1.2.1 2010/06/25 03:39:43 Exp $
  */
 
 #ifndef	_bcmsdpcm_h_
@@ -67,10 +67,11 @@
 #define HMB_MASK	0x0000000f	/* To Host Mailbox Mask */
 
 /* tohostmailboxdata */
-#define HMB_DATA_NAKHANDLED	1	/* we're ready to retransmit NAK'd frame to host */
-#define HMB_DATA_DEVREADY	2	/* we're ready to to talk to host after enable */
-#define HMB_DATA_FC		4	/* per prio flowcontrol update flag to host */
-#define HMB_DATA_FWREADY	8	/* firmware is ready for protocol activity */
+#define HMB_DATA_NAKHANDLED	0x01	/* we're ready to retransmit NAK'd frame to host */
+#define HMB_DATA_DEVREADY	0x02	/* we're ready to to talk to host after enable */
+#define HMB_DATA_FC		0x04	/* per prio flowcontrol update flag to host */
+#define HMB_DATA_FWREADY	0x08	/* firmware is ready for protocol activity */
+#define HMB_DATA_FWHALT		0x10	/* firmware has halted operation */
 
 #define HMB_DATA_FCDATA_MASK	0xff000000	/* per prio flowcontrol data */
 #define HMB_DATA_FCDATA_SHIFT	24		/* per prio flowcontrol data */
@@ -259,5 +260,8 @@ typedef struct {
 } sdpcm_shared_t;
 
 extern sdpcm_shared_t sdpcm_shared;
+
+/* Function can be used to notify host of FW halt */
+extern void sdpcmd_fwhalt(void);
 
 #endif	/* _bcmsdpcm_h_ */

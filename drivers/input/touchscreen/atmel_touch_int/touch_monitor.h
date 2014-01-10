@@ -4,6 +4,7 @@
  */
 
 #include "touch_log.h"
+#include "../touch_ioctl.h"
 
 static int monitor_open(struct inode *inode, struct file *file);
 static ssize_t monitor_read(struct file *file, char *buf, size_t count, loff_t *ppos);
@@ -60,26 +61,6 @@ typedef struct
 } touch_monitor_info_t;
 //static touch_monitor_info_t *touch_monitor_info; 
 
-typedef enum 
-{
-	GET_TOUCH_ID = 101, 
-	APPLY_TOUCH_CONFIG = 501,
-	DIAG_DEBUG = 502,
-	RESET_TOUCH_CONFIG = 503,
-	GET_TOUCH_CONFIG = 504,
-	SET_TOUCH_CONFIG = 505,
-	READ_ITO_TYPE = 506,
-	TOUCH_IOCTL_DEBUG = 507,
-	GET_REFERENCE_DATA = 508,
-	CALIBRATE = 509,
-
-	TOUCH_CHARGER_MODE = 701,
-
-	TOUCH_CALL_MODE_ENABLE = 1013,
-	TOUCH_CALL_MODE_DISABLE = 1014
-}CONFIG_CMD;
-
-
 static long monitor_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int data, object_type, field_index;
@@ -117,7 +98,7 @@ static long monitor_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		case TOUCH_IOCTL_DEBUG:
 			return ioctl_debug(arg);
 			break;
-		case TOUCH_CHARGER_MODE:
+		case TOUCH_IOCTL_CHARGER_MODE:
 			qt_charger_mode_config(arg);
 			break;
 		case DIAG_DEBUG:
@@ -136,6 +117,13 @@ static long monitor_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	}
 	return 0;
 }
+
+
+
+
+    //todo
+
+
 
 // call in driver init function
 void touch_monitor_init(void) {

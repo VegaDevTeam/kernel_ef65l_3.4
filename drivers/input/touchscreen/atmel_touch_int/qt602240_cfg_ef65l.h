@@ -23,9 +23,8 @@
 #define TOUCH_HOME_MAX		483 // 290	// 480/2 + 50
 #define TOUCH_BACK_MIN		601 // 361	// 453 - 92
 #define TOUCH_BACK_MAX		755 // 453	// 480 - 27
-
-#define EARJACK_TCHTHR  58
-#define EARJACK_TCHHYST 14
+#define EARJACK_TCHTHR	58
+#define EARJACK_TCHHYST	14
 
 #ifdef ITO_TYPE_CHECK
 /*
@@ -41,12 +40,16 @@ static ito_table_element ito_table[] = {
 	{1500,	9999}, // 3 : reserved
 };
 #endif
-
 /* -------------------------------------------------------------------- */
 /* qt602240 protocol define */
 /* -------------------------------------------------------------------- */
+
+#define QT602240_EF65L_MAX_CHANNEL_NUM			209
 #define QT602240_REFERENCE_MIN			3680 
 #define QT602240_REFERENCE_MAX			13280
+
+#define QT602240_DELTA_MODE			0x10
+#define QT602240_REFERENCE_MODE		0x11
 
 #ifdef PROTECTION_MODE
 /* -------------------------------------------------------------------- */
@@ -66,7 +69,7 @@ static ito_table_element ito_table[] = {
 
 /* _SPT_USERDATA_T38 INSTANCE 0 */
 #define T7_IDLEACQINT			32
-#define T7_IDLEACQINT_PLUG	   	255 
+#define T7_IDLEACQINT_PLUG	    255
 #define T7_ACTVACQINT			255
 #define T7_ACTV2IDLETO		    30
 
@@ -76,13 +79,13 @@ static ito_table_element ito_table[] = {
 #define T8_DRIFTST              1
 #define T8_TCHAUTOCAL           0
 #define T8_SYNC                 0
-#define T8_ATCHCALST            255
+#define T8_ATCHCALST            0 	//255 //0
 #define T8_ATCHCALSTHR          1
-#define T8_ATCHFRCCALTHR        255
-#define T8_ATCHFRCCALRATIO      127
+#define T8_ATCHFRCCALTHR        0        
+#define T8_ATCHFRCCALRATIO      0     
 
 /* _TOUCH_MULTITOUCHSCREEN_T9 INSTANCE 0 */
-#define T9_CTRL                 131
+#define T9_CTRL                 143
 #define T9_XORIGIN              0
 #define T9_YORIGIN              0
 #define T9_XSIZE                19

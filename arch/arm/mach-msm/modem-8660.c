@@ -30,6 +30,10 @@
 #include "modem_notifier.h"
 #include "ramdump.h"
 
+#ifdef CONFIG_PANTECH_RESET_REASON
+#include "sky_sys_reset.h"
+#endif
+
 #define MODEM_HWIO_MSS_RESET_ADDR       0x00902C48
 #define MODULE_NAME			"modem_8660"
 #define MODEM_WDOG_ENABLE		0x10020008
@@ -75,6 +79,9 @@ static void modem_unlock_timeout(struct work_struct *work)
 	mb();
 	iounmap(hwio_modem_reset_addr);
 
+#ifdef CONFIG_PANTECH_RESET_REASON
+	sky_sys_rst_set_reboot_info(SYS_RESET_REASON_AMSS);
+#endif
 	subsystem_restart("modem");
 	enable_irq(MARM_WDOG_EXPIRED);
 }
@@ -93,6 +100,9 @@ static void modem_fatal_fn(struct work_struct *work)
 
 	if (modem_state == 0 || modem_state & panic_smsm_states) {
 
+#ifdef CONFIG_PANTECH_RESET_REASON
+		sky_sys_rst_set_reboot_info(SYS_RESET_REASON_AMSS);
+#endif
 		subsystem_restart("modem");
 		enable_irq(MARM_WDOG_EXPIRED);
 
@@ -135,6 +145,9 @@ static int modem_notif_handler(struct notifier_block *this,
 			goto out;
 		}
 		pr_err("%s: Modem error fatal'ed.", MODULE_NAME);
+#ifdef CONFIG_PANTECH_RESET_REASON
+		sky_sys_rst_set_reboot_info(SYS_RESET_REASON_AMSS);
+#endif
 		subsystem_restart("modem");
 	}
 out:

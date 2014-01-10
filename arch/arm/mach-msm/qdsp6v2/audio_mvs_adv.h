@@ -46,8 +46,10 @@
 
 
 ////////////////////////////////////////////////////////////////////////////////////
-//jhpark-MVS #define MVS_ADV_SUPPORT // USE MVS interface
-//jhpark-MVS #define VOLUMEKEY_NOISE_FIX // Eliminate volumekey noise
+#if 0 //ndef CONFIG_SKY_SND_MVS
+#define MVS_ADV_SUPPORT // USE MVS interface
+#define VOLUMEKEY_NOISE_FIX // Eliminate volumekey noise
+#endif
 ////////////////////////////////////////////////////////////////////////////////////
 /*---------------------- SIZE DEFINE ------------------------*/
 #define VOC_PCM_PACKET_SIZE 320

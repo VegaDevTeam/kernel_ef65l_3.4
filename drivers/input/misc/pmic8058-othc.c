@@ -12,6 +12,8 @@
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
+
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -187,19 +189,13 @@ int pm8058_othc_svideo_enable(enum othc_micbias micbias, bool enable)
 		gpio_set_value_cansleep(dd->video_out_gpio, !!enable);
 		if (enable) {
 			pr_debug("Enable the video path\n");
-#if defined(CONFIG_MACH_MSM8X60_EF65L)
-#else
 			switch_set_state(&dd->othc_sdev, dd->curr_accessory);
-#endif
 			input_report_switch(dd->othc_ipd,
 						dd->curr_accessory_code, 1);
 			input_sync(dd->othc_ipd);
 		} else {
 			pr_debug("Disable the video path\n");
-#if defined(CONFIG_MACH_MSM8X60_EF65L)
-#else
 			switch_set_state(&dd->othc_sdev, 0);
-#endif
 			input_report_switch(dd->othc_ipd,
 					dd->curr_accessory_code, 0);
 			input_sync(dd->othc_ipd);
@@ -425,10 +421,7 @@ static int pm8058_accessory_report(struct pm8058_othc *dd, int status)
 
 	if (dd->accessory_support == false) {
 		/* Report default headset */
-#if defined(CONFIG_MACH_MSM8X60_EF65L)
-#else
 		switch_set_state(&dd->othc_sdev, !!status);
-#endif
 		input_report_switch(dd->othc_ipd, SW_HEADPHONE_INSERT,
 							!!status);
 		input_sync(dd->othc_ipd);
@@ -447,10 +440,7 @@ static int pm8058_accessory_report(struct pm8058_othc *dd, int status)
 		if (dd->curr_accessory == OTHC_SVIDEO_OUT)
 			return 0;
 
-#if defined(CONFIG_MACH_MSM8X60_EF65L)
-#else
 		switch_set_state(&dd->othc_sdev, 0);
-#endif
 		input_report_switch(dd->othc_ipd, dd->curr_accessory_code, 0);
 		input_sync(dd->othc_ipd);
 		return 0;
@@ -527,10 +517,7 @@ static int pm8058_accessory_report(struct pm8058_othc *dd, int status)
 					dd->othc_pdata->micbias_select, true);
 
 		} else {
-#if defined(CONFIG_MACH_MSM8X60_EF65L)
-#else
 			switch_set_state(&dd->othc_sdev, dd->curr_accessory);
-#endif
 			input_report_switch(dd->othc_ipd,
 						dd->curr_accessory_code, 1);
 			input_sync(dd->othc_ipd);
@@ -774,8 +761,6 @@ static int pm8058_configure_micbias(struct pm8058_othc *dd)
 	return 0;
 }
 
-#if defined(CONFIG_MACH_MSM8X60_EF65L)
-#else
 static ssize_t othc_headset_print_name(struct switch_dev *sdev, char *buf)
 {
 	switch (switch_get_state(sdev)) {
@@ -791,7 +776,6 @@ static ssize_t othc_headset_print_name(struct switch_dev *sdev, char *buf)
 	}
 	return -EINVAL;
 }
-#endif
 
 static int pm8058_configure_switch(struct pm8058_othc *dd)
 {
@@ -903,8 +887,6 @@ othc_configure_hsed(struct pm8058_othc *dd, struct platform_device *pd)
 	struct pmic8058_othc_config_pdata *pdata = pd->dev.platform_data;
 	struct othc_hsed_config *hsed_config = pdata->hsed_config;
 
-#if defined(CONFIG_MACH_MSM8X60_EF65L)
-#else
 	dd->othc_sdev.name = "h2w";
 	dd->othc_sdev.print_name = othc_headset_print_name;
 
@@ -913,7 +895,7 @@ othc_configure_hsed(struct pm8058_othc *dd, struct platform_device *pd)
 		pr_err("Unable to register switch device\n");
 		return rc;
 	}
-#endif
+
 	ipd = input_allocate_device();
 	if (ipd == NULL) {
 		pr_err("Unable to allocate memory\n");

@@ -30,6 +30,16 @@
 #include "msm_fb.h"
 #include "hdmi_msm.h"
 
+#ifdef CONFIG_PANTECH_LCD_MHL_CABLE_DETECT
+extern int pantech_hdmi_cable_detect(int on);
+extern uint32_t MHL_Get_Cable_State(void);
+extern bool get_mhl_ctrled_hpd_state(void);
+/* kkcho for reauth support */
+#define CONFIG_PANTECH_HDCP_REAUTH_SUPPORT
+/* 20130708, kkcho, delay time for increasing connect success*/
+#define PANTECH_HDCP_DELAY
+#endif
+
 /* Supported HDMI Audio channels */
 #define MSM_HDMI_AUDIO_CHANNEL_2		0
 #define MSM_HDMI_AUDIO_CHANNEL_4		1
@@ -761,6 +771,49 @@ static int hdmi_msm_audio_off(void);
 static int hdmi_msm_read_edid(void);
 static void hdmi_msm_hpd_off(void);
 
+#ifdef CONFIG_PANTECH_LCD_HDMI_NOTIFY_POWER_ON
+int pantech_hdmi_cable_detect(int on)
+{
+	char *envp[2];
+//	static int prev_on ;	
+//if (on == prev_on)
+//	return 0;	
+
+DEV_INFO("%s: in",__func__);
+
+	if (on)
+	{
+		/* Build EDID table */
+		envp[0] = "PHDMI=ON";
+		envp[1] = NULL;
+		DEV_INFO("pantech_hdmi_on ~~~~~~~~~~~~~ \n");
+		kobject_uevent_env(external_common_state->uevent_kobj,
+		KOBJ_CHANGE, envp);	
+	}
+	else
+	{
+
+			kobject_uevent(external_common_state->uevent_kobj,
+				KOBJ_OFFLINE);
+			switch_set_state(&external_common_state->sdev, 0);
+			DEV_INFO("Hdmi state switch to %d: %s\n",
+				external_common_state->sdev.state,  __func__);
+	
+		/* Build EDID table */
+		envp[0] = "PHDMI=OFF";
+		envp[1] = NULL;
+		DEV_INFO("pantech_hdmi_off ~~~~~~~~~~~~~ \n");
+		kobject_uevent_env(external_common_state->uevent_kobj,
+		KOBJ_CHANGE, envp);	
+	
+	}
+
+//	prev_on = on;
+	return 0;	
+}
+EXPORT_SYMBOL(pantech_hdmi_cable_detect);
+#endif
+
 static void hdmi_msm_send_event(boolean on)
 {
 	char *envp[2];
@@ -773,6 +826,10 @@ static void hdmi_msm_send_event(boolean on)
 			   KOBJ_CHANGE, envp);
 
 	if (on) {
+#ifdef CONFIG_PANTECH_LCD_MHL_CABLE_DETECT	
+		if(MHL_Get_Cable_State()==FALSE)
+			return;
+#endif				
 		/* Build EDID table */
 		hdmi_msm_read_edid();
 		switch_set_state(&external_common_state->sdev, 1);
@@ -808,6 +865,16 @@ static void hdmi_msm_hpd_state_work(struct work_struct *work)
 		DEV_ERR("hdmi: %s: ignored, probe failed\n", __func__);
 		return;
 	}
+
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244
+	DEV_DBG("get_mhl_ctrled_hpd_state = %d", get_mhl_ctrled_hpd_state());
+
+	if (!get_mhl_ctrled_hpd_state() /*&& !MHL_Get_Cable_State()*/)
+			{
+				mod_timer(&hdmi_msm_state->hpd_state_timer, jiffies + HZ/2);
+				return;
+			}
+#endif
 
 	mutex_lock(&hdmi_msm_state_mutex);
 	DEV_DBG("%s: Handling HPD event in the workqueue\n", __func__);
@@ -2486,6 +2553,13 @@ static int hdcp_authentication_part1(void)
 			mutex_unlock(&hdcp_auth_state_mutex);
 			goto error;
 		}
+#ifdef PANTECH_HDCP_DELAY
+		/*
+		 * A small delay is needed here to avoid device crash observed
+		 * during reauthentication in MSM8960
+		 */
+		msleep(20);
+#endif		
 
 		/* 0x0168 HDCP_RCVPORT_DATA12
 		   [23:8] BSTATUS
@@ -2988,6 +3062,10 @@ static void hdmi_msm_hdcp_enable(void)
 	hdmi_msm_state->full_auth_done = FALSE;
 	mutex_unlock(&hdcp_auth_state_mutex);
 
+#ifdef PANTECH_HDCP_DELAY 
+	msleep(5);
+#endif
+
 	/* PART I Authentication*/
 	ret = hdcp_authentication_part1();
 	if (ret)
@@ -3058,9 +3136,21 @@ error:
 		mutex_unlock(&hdcp_auth_state_mutex);
 	} else {
 		DEV_WARN("[DEV_DBG]: Calling reauth from [%s]\n", __func__);
+#ifdef CONFIG_PANTECH_HDCP_REAUTH_SUPPORT
+		if (hdmi_msm_state->panel_power_on)
+		{
+			queue_work(hdmi_work_queue,
+				&hdmi_msm_state->hdcp_reauth_work);
+		}else if(MHL_Get_Cable_State() && ((HDMI_INP(0x0250) & 0x2) >> 1))
+		{
+			hdcp_deauthenticate();
+			mod_timer(&hdmi_msm_state->hdcp_timer, jiffies + HZ/2); 
+		}
+#else
 		if (hdmi_msm_state->panel_power_on)
 			queue_work(hdmi_work_queue,
 			    &hdmi_msm_state->hdcp_reauth_work);
+#endif
 	}
 	switch_set_state(&external_common_state->sdev, 0);
 	DEV_INFO("Hdmi state switched to %d: %s\n",
@@ -4395,6 +4485,40 @@ static int hdmi_msm_power_on(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244  // 20130703, kkcho, for cable detect on JB
+void change_hpd_state(boolean on){	
+	external_common_state->hpd_feature(on);
+	external_common_state->hpd_feature_on = on;
+}
+EXPORT_SYMBOL(change_hpd_state);
+
+void change_mhl_state(boolean online)
+{
+#if (0) 
+	/* Simulating a HPD event based on MHL event */
+	hdmi_msm_state->hpd_cable_chg_detected = FALSE;
+	/* QDSP OFF preceding the HPD event notification */
+	switch_set_state(&external_common_state->sdev, 0);
+#endif
+
+	if (online) {
+//		hdmi_msm_read_edid();
+//		hdmi_msm_state->reauth = FALSE ;
+//		hdmi_msm_turn_on();
+		kobject_uevent(external_common_state->uevent_kobj,
+			KOBJ_ONLINE);
+//		switch_set_state(&external_common_state->sdev, 1);
+//		hdmi_msm_hdcp_enable();
+	} else {
+		//switch_set_state(&external_common_state->sdev, 0);
+		kobject_uevent(external_common_state->uevent_kobj,
+			KOBJ_OFFLINE);
+//		switch_set_state(&external_common_state->sdev, 0);
+	}
+}
+EXPORT_SYMBOL(change_mhl_state);
+#endif
+
 void mhl_connect_api(boolean on)
 {
 	char *envp[2];
@@ -4406,6 +4530,9 @@ void mhl_connect_api(boolean on)
 	DEV_INFO("Hdmi state switched to %d: %s\n",
 		 external_common_state->sdev.state,  __func__);
 	if (on) {
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244 // PANTECH_FUSION2_MHL_DETECT	
+		//change_hpd_state(true);
+#endif
 		hdmi_msm_read_edid();
 		if (hdmi_msm_has_hdcp())
 			hdmi_msm_state->reauth = FALSE ;
@@ -4769,7 +4896,12 @@ static int __init hdmi_msm_init(void)
 			hdmi_prim_resolution - 1;
 	else
 		external_common_state->video_resolution =
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244
+			HDMI_VFRMT_1920x1080p30_16_9;
+#else
 			HDMI_VFRMT_1920x1080p60_16_9;
+#endif
+
 
 #ifdef CONFIG_FB_MSM_HDMI_3D
 	external_common_state->switch_3d = hdmi_msm_switch_3d;

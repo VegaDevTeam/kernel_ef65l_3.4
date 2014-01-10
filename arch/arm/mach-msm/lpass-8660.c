@@ -30,6 +30,10 @@
 #include "modem_notifier.h"
 #include "ramdump.h"
 
+#ifdef CONFIG_PANTECH_RESET_REASON
+#include "sky_sys_reset.h"
+#endif
+
 #define Q6SS_WDOG_ENABLE		0x28882024
 #define Q6SS_SOFT_INTR_WAKEUP		0x288A001C
 #define MODULE_NAME			"lpass_8x60"
@@ -44,6 +48,9 @@ static void __iomem *q6_wakeup_intr;
 static void q6_fatal_fn(struct work_struct *work)
 {
 	pr_err("%s: Watchdog bite received from Q6!\n", MODULE_NAME);
+#ifdef CONFIG_PANTECH_RESET_REASON
+	sky_sys_rst_set_reboot_info(SYS_RESET_REASON_LPASS);
+#endif
 	subsystem_restart("lpass");
 	enable_irq(LPASS_Q6SS_WDOG_EXPIRED);
 }

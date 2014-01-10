@@ -27,14 +27,17 @@ struct msm_serial_hs_platform_data {
 	int (*gpio_config)(int);
 };
 
+#if 1 //brcm-test BRCM BT_SYS_P12523
+#define CLOCK_REQUEST_AVAILABLE 	0
+#define CLOCK_REQUEST_UNAVAILABLE 	1
+struct uart_port * msm_hs_get_bt_uport(unsigned int line);
+int msm_hs_get_bt_uport_clock_state(struct uart_port *uport);
+struct uart_port * msm_hs_get_bt_uport(unsigned int line);
+
+#endif
 unsigned int msm_hs_tx_empty(struct uart_port *uport);
 void msm_hs_request_clock_off(struct uart_port *uport);
 void msm_hs_request_clock_on(struct uart_port *uport);
 void msm_hs_set_mctrl(struct uart_port *uport,
 				    unsigned int mctrl);
-//+++ BRCM[Excelt], BTL-A
-#if 1		  
-struct uart_port * msm_hs_get_bt_uport(unsigned int line);
-#endif
-//--- BRCM[Excelt], BTL-A
 #endif

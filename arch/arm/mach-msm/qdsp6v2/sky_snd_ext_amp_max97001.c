@@ -20,7 +20,6 @@
 /************************************************************************************************
 ** Includes
 *************************************************************************************************/
-#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
@@ -30,6 +29,11 @@
 //#include "dal.h"
 //#include "dal_audio.h"
 #include "sky_snd_ext_amp_max97001.h"
+
+#include <linux/module.h>
+#include <linux/uaccess.h>
+#include <linux/msm_audio.h>
+#include <mach/board.h>
 
 #ifdef FEATURE_SKY_SND_AUDIO_TEST_COMMAND
 #include <asm/ioctls.h>
@@ -486,7 +490,12 @@ void snd_extamp_api_SetDevice(int on, uint32_t cad_device)
 	          tCurrentExtampInfo.sp_mixer_ctl_reg_val  = SPKMIX_INB2;
 	          tCurrentExtampInfo.hpl_ctl_reg_val       = ZCD_DIS | SLEW_DIS | HPLM_UNMUTE | HPLVOL_M_19_DB;
 	          tCurrentExtampInfo.hpr_ctl_reg_val       = HPGAIN_P_3_DB | HPRM_UNMUTE | HPRVOL_M_19_DB;
-	          tCurrentExtampInfo.sp_ctl_reg_val        = FFM_FF_MODE  | SPKM_UNMUTE | SPKVOL_M_4_DB;
+/* 20130926_hschoi_volume tuning for difference between SPEAKER_RX and SPEAKER_HEADSET_RX */
+#if defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD)
+	          tCurrentExtampInfo.sp_ctl_reg_val        = FFM_FF_MODE  | SPKM_UNMUTE | SPKVOL_P_0_DB;	  
+#else
+		      tCurrentExtampInfo.sp_ctl_reg_val        = FFM_FF_MODE  | SPKM_UNMUTE | SPKVOL_M_4_DB;	  
+#endif
 	          tCurrentExtampInfo.limiter_ctl_reg_val   = THDCLP_BELOW_8_PER | THDT1_1_DOT_4_SEC;
 	          tCurrentExtampInfo.power_man_ctl_reg_val = SHDN_EN  | LPMODE_DIS | SPKEN_EN | HPLEN_EN | HPREN_EN | BYPEN_OPEN;
 		}

@@ -60,10 +60,27 @@ struct clk_pair clks[KGSL_MAX_CLKS] = {
 	},
 };
 
+#ifdef CONFIG_PANTECH_FIX_UNDERRUN_WHEN_USING_FB_WITH_MHL
+extern int MHL_Get_Cable_State(void);
+extern bool get_mhl_ctrled_hpd_state(void);
+#endif
 void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 				unsigned int new_level)
 {
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+
+#ifdef CONFIG_PANTECH_FIX_UNDERRUN_WHEN_USING_FB_WITH_MHL
+        #define FIXED_LEVEL 0
+		if(MHL_Get_Cable_State() && get_mhl_ctrled_hpd_state() && new_level > FIXED_LEVEL)
+		{
+            if(FIXED_LEVEL >= pwr->thermal_pwrlevel)
+                new_level = FIXED_LEVEL;
+            else
+                new_level = pwr->thermal_pwrlevel;
+            //printk("%s() old %d new %d thermal %d\n", __func__, pwr->active_pwrlevel, new_level, pwr->thermal_pwrlevel);
+		}
+#endif
+
 	if (new_level < (pwr->num_pwrlevels - 1) &&
 		new_level >= pwr->thermal_pwrlevel &&
 		new_level != pwr->active_pwrlevel) {
@@ -71,6 +88,7 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 		int diff = new_level - pwr->active_pwrlevel;
 		int d = (diff > 0) ? 1 : -1;
 		int level = pwr->active_pwrlevel;
+
 		pwr->active_pwrlevel = new_level;
 		if ((test_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags)) ||
 			(device->state == KGSL_STATE_NAP)) {

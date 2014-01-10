@@ -796,6 +796,45 @@ unsigned int msm_hs_tx_empty(struct uart_port *uport)
 }
 EXPORT_SYMBOL(msm_hs_tx_empty);
 
+#if 1 //brcm-test BRCM BT_SYS_P12523
+struct uart_port* msm_hs_get_bt_uport(unsigned int line)
+{
+     return &q_uart_port[line].uport;
+}
+EXPORT_SYMBOL(msm_hs_get_bt_uport);
+
+// Get UART Clock State : 
+int msm_hs_get_bt_uport_clock_state(struct uart_port *uport)
+{
+	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	//unsigned long flags;	
+	int ret = CLOCK_REQUEST_UNAVAILABLE;
+
+	//mutex_lock(&msm_uport->clk_mutex);
+	//spin_lock_irqsave(&uport->lock, flags);
+
+	switch(msm_uport->clk_state)
+	{
+		case MSM_HS_CLK_ON:
+		case MSM_HS_CLK_PORT_OFF:
+			printk(KERN_ERR "UART Clock already on or port not use : %d\n", msm_uport->clk_state);
+			ret = CLOCK_REQUEST_UNAVAILABLE;
+			break;
+		case MSM_HS_CLK_REQUEST_OFF:
+		case MSM_HS_CLK_OFF:
+			printk(KERN_ERR "Uart clock off. Please clock on : %d\n", msm_uport->clk_state);
+			ret = CLOCK_REQUEST_AVAILABLE;
+			break;
+	}
+
+	//spin_unlock_irqrestore(&uport->lock, flags);
+	//mutex_unlock(&msm_uport->clk_mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL(msm_hs_get_bt_uport_clock_state);
+
+#endif
 /*
  *  Standard API, Stop transmitter.
  *  Any character in the transmit shift register is sent as
@@ -820,6 +859,17 @@ static void msm_hs_stop_rx_locked(struct uart_port *uport)
 {
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 	unsigned int data;
+
+// +++ 2013-09-10 BT_SYS_P12523 BRCM_PATCH QCT_PATCH_HW_RESET_AFTER_AIRPLANE
+	if (msm_uport->clk_state == MSM_HS_CLK_OFF) {
+		spin_unlock(&uport->lock);
+		clk_prepare_enable(msm_uport->clk);
+		if (msm_uport->pclk)
+			clk_prepare_enable(msm_uport->pclk);
+		spin_lock(&uport->lock);
+	}
+// --- 2013-09-10 BT_SYS_P12523 BRCM_PATCH QCT_PATCH_HW_RESET_AFTER_AIRPLANE
+
 
 	/* disable dlink */
 	data = msm_hs_read(uport, UARTDM_DMEN_ADDR);
@@ -2148,9 +2198,8 @@ static int msm_hs_runtime_resume(struct device *dev)
 						    platform_device, dev);
 	struct msm_hs_port *msm_uport = &q_uart_port[pdev->id];
 
-#if 1
-	if(pdev->id == 0) return 0;  // BT uart. p12912-NOL
-#endif
+// 2013-06-26 BT_SYS_P12523 block to control BT uart by msm sleep control 
+	if(pdev->id == 0) return 0;  
 	
 	msm_hs_request_clock_on(&msm_uport->uport);
 	return 0;
@@ -2162,9 +2211,8 @@ static int msm_hs_runtime_suspend(struct device *dev)
 						    platform_device, dev);
 	struct msm_hs_port *msm_uport = &q_uart_port[pdev->id];
 
-#if 1
-	if(pdev->id == 0) return 0;  // BT uart. p12912-NOL
-#endif
+// 2013-06-26 BT_SYS_P12523 block to control BT uart by msm sleep control 
+	if(pdev->id == 0) return 0;
 
 	msm_hs_request_clock_off(&msm_uport->uport);
 	return 0;
@@ -2210,14 +2258,6 @@ static struct uart_ops msm_hs_ops = {
 	.release_port = msm_hs_release_port,
 	.request_port = msm_hs_request_port,
 };
-
-#if 1
-struct uart_port* msm_hs_get_bt_uport(unsigned int line)
-{
-	return &q_uart_port[line].uport;
-}
-EXPORT_SYMBOL(msm_hs_get_bt_uport);
-#endif
 
 module_init(msm_serial_hs_init);
 module_exit(msm_serial_hs_exit);

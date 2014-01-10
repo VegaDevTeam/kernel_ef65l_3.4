@@ -135,4 +135,6 @@ void hdmi_msm_cec_one_touch_play(void);
 void hdmi_msm_cec_msg_send(struct hdmi_msm_cec_msg *msg);
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT */
 void mhl_connect_api(boolean on);
+void change_mhl_state(boolean online);
+void change_hpd_state(boolean on);
 #endif /* __HDMI_MSM_H__ */

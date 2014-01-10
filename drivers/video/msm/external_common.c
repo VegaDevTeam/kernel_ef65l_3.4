@@ -829,6 +829,35 @@ static ssize_t hdmi_common_rda_hdmi_primary(struct device *dev,
 	return ret;
 }
 
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244
+static ssize_t hdmi_common_rda_hdmi_ready(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	/*
+	ssize_t ret = snprintf(buf, PAGE_SIZE, "%d\n",
+		external_common_state->video_resolution+1);
+	DEV_DBG("%s: '%d'\n", __func__,
+			external_common_state->video_resolution+1);
+			*/
+			printk("raed!!!");
+	return 0;
+}
+
+extern void hdmi_ready_func(int value);
+static ssize_t hdmi_common_wta_hdmi_ready(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	ssize_t ret = strnlen(buf, PAGE_SIZE);
+	uint32 is_hdmi_ready;
+	DEV_DBG("%s: in",__func__);
+	is_hdmi_ready = atoi(buf);
+	///DEV_INFO("%s: hdmi_block is %d\n", __func__, video_mode);
+	//hdmi_ready = is_block_hdmi;
+	hdmi_ready_func(is_hdmi_ready);
+	return ret;
+}
+#endif
+
 static DEVICE_ATTR(video_mode, S_IRUGO | S_IWUGO,
 	external_common_rda_video_mode, external_common_wta_video_mode);
 static DEVICE_ATTR(video_mode_str, S_IRUGO, external_common_rda_video_mode_str,
@@ -859,6 +888,10 @@ static DEVICE_ATTR(format_3d, S_IRUGO | S_IWUGO, hdmi_3d_rda_format_3d,
 	hdmi_3d_wta_format_3d);
 #endif
 static DEVICE_ATTR(hdmi_primary, S_IRUGO, hdmi_common_rda_hdmi_primary, NULL);
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244
+static DEVICE_ATTR(hdmi_ready, S_IRUGO | S_IWUGO, hdmi_common_rda_hdmi_ready,
+	hdmi_common_wta_hdmi_ready);
+#endif
 
 static struct attribute *external_common_fs_attrs[] = {
 	&dev_attr_video_mode.attr,
@@ -887,6 +920,9 @@ static struct attribute *external_common_fs_attrs[] = {
 	&dev_attr_cec_wr_frame.attr,
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT */
 	&dev_attr_hdmi_primary.attr,
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244
+	&dev_attr_hdmi_ready.attr,
+#endif	
 	NULL,
 };
 static struct attribute_group external_common_fs_attr_group = {
@@ -1977,7 +2013,11 @@ EXPORT_SYMBOL(hdmi_common_read_edid);
 
 bool hdmi_common_get_video_format_from_drv_data(struct msm_fb_data_type *mfd)
 {
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244	
+	uint32 format = HDMI_VFRMT_1920x1080p30_16_9;
+#else
 	uint32 format = HDMI_VFRMT_1920x1080p60_16_9;
+#endif
 	struct fb_var_screeninfo *var = &mfd->fbi->var;
 	bool changed = TRUE;
 

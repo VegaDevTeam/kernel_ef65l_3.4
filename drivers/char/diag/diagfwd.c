@@ -60,51 +60,319 @@ struct mask_info {
 	int index;
 };
 
+#if defined(CONFIG_MACH_MSM8X60_EF33S) || defined(CONFIG_MACH_MSM8X60_EF34K) || defined(CONFIG_MACH_MSM8X60_EF35L) || defined(CONFIG_MACH_MSM8X60_EF65L)
+#define FEATURE_PANTECH_FACTORY_COMMAND
+#endif
+
+#ifdef FEATURE_PANTECH_FACTORY_COMMAND
+/*  Sub Command 	*/
+/* 2013.06.20 - Rev10.65 */
+enum
+{
+    FACTORY_CS_AUTO_LAYER1_I       = 2, // 0x2-�����ð�, �� ���� �ð�, Ű ���� Ƚ��
+    FACTORY_CS_AUTO_LAYER2_I       = 3, // 0x3-Slide(Folder) ���� Ƚ��, ���� ü�� Ƚ��
+    FACTORY_CS_AUTO_LAYER3_I       = 4, // 0x4-ī�޶� ���� �ð�, LCD Backlight �����ð�
+    FACTORY_CS_AUTO_MEMORY_I       = 5, // 0x5-�޸��� ���� �뷮
+    FACTORY_CS_AUTO_CALL1_I        = 6, // 0x6-�� ��ȭ �ð�/�Ǽ�, ���� ��ȭ �ð�
+    FACTORY_CS_AUTO_CALL2_I        = 7, // 0x7-SMS ��/�߽� �Ǽ�, WAP ���� �Ǽ�
+    FACTORY_CS_AUTO_CALL3_I        = 8, // 0x8-�������ͳ� �ð�, NO SVC/Call Drop �߻� Ƚ��
+    FACTORY_CS_AUTO_RESET_I        = 9, // 0x9-s/w reset, ���� ON/OFF Ƚ��, h/w reset
+    FACTORY_CS_AUTO_ERRLOG_I       = 10, // 0xA-���� �α�
+    FACTORY_CS_AUTO_CALL4_I        = 11, // 0xB-Call drop �� �߽� ����
+    FACTORY_CS_AUTO_CALL5_I        = 12, // 0xC-�߽� �� ���� ����
+    /* 13-19 Reserved */
+    FACTORY_MSECTOR_WRITE_I        = 20, // 0x14-MSector Write Flag
+    FACTORY_MSECTOR_READ_I         = 21, // 0x15-MSector Read Flag
+    /* 22-29 Reserved */
+    FACTORY_CAL_CHECK_FLAG_I       = 30, // 0x1E-Cal �ϷῩ�� Ȯ��
+    /* 31-38 Reserved */
+    FACTORY_FIRMWARE_VER_I         = 39, // 0x27-FIRMWARE ���� Ȯ��
+    FACTORY_M3A_NAND_VER_I         = 40, // 0x28-2nd NAND/TCC Version ���� Ȯ��
+    /* 41-47 Reserved */	
+    FACTORY_FINAL_I                = 48, // 0x30-���ϼ������� �ʱ�ȭ
+    FACTORY_FINAL_CHECK_I          = 49, // 0x31-���ϼ������� Ȯ��
+    /* 50-54 Reserved */	
+    FACTORY_INIT_ALL_I             = 55, // 0x37-��ü �ʱ�ȭ.
+    FACTORY_INIT_RESET_I           = 56, // 0x38-�ʱ�ȭ �Ϸ� �� H/W ����
+    /* 57 Reserved */
+    FACTORY_INIT_SYS_CHECK_I       = 58, // 0x3A-�ý����ʱ�ȭ Ȯ��
+    /* 59 Reserved */
+    FACTORY_RSSIBAR_READ_I         = 60, // 0x3C-RSSI BAR Read
+    /* 61-63 Reserved */	
+    FACTORY_OPENING_DAY_READ_I     = 64, // 0x40-Opening Day Read
+    /* 65-89 Reserved */
+    FACTORY_BD_ADDR_RD_I           = 90, // 0x5A-Bluetooth Device Address Read
+    FACTORY_BD_ADDR_WR_I           = 91, // 0x5B-Bluetooth Device Address Write
+    /* 92-95 Reserved */
+    FACTORY_WIFI_MODESET_I         = 96, // 0x60-RX/TX DUT Mode����
+    FACTORY_WIFI_TXCTRL_I          = 97, // 0x61-TX Mode ���� �� TX Power ����(ON/OFF)
+    FACTORY_WIFI_RXRPT_I           = 98, // 0x62-RX Mode ���� �� BER ����
+    FACTORY_WIFI_RELEASE_I         = 99, // 0x63-Test �Ϸ� �� Test Mode ����
+    FACTORY_BOOT_CHECK_I           = 100, // 0x64-������ �Ϸ��Ǿ TEST���� �������� Ȯ��
+    FACTORY_PRELOAD_CHECKSUM_I     = 101, // 0x65-Preload ������ ���� Checksum Ȯ��
+    FACTORY_EMMC_FW_VER_I          = 102, // 0x66-eMMC F/W Version Read
+    FACTORY_POWER_COUNT_INIT_I 	   = 103, // Power Reset Count �ʱ�ȭ
+    FACTORY_DEVICE_ID_I	  	   = 104, // �ֿ� Device�� ���� ID Ȯ��
+    FACTORY_PVS_CHECK_I		   = 105, // Processor Voltage Setting Ȯ��
+    /* 106-109 Reserved */  
+    FACTORY_KEY_PRESS_I            = 110, // 0x6E-Command�� �̿��Ͽ� Ű�� ���۽�Ŵ
+    /* 111-119 Reserved */
+    FACTORY_SPEAKER_I              = 120, // 0x78-Speaker�� �̿��� ������ ����
+    /* 121-124 Reserved */
+    FACTORY_IRDA_I                 = 125, // 0x7D-IRDA Port�� ������ �ۼ��� Test
+    /* 126-134 Reserved */
+    FACTORY_BATTERY_BAR_I          = 135, // 0x87-Battery bar ������ �˾Ƴ�
+    /* 136-139 Reserved */
+    FACTORY_SLEEP_ENABLE_I	   = 140, // 0x8C-Force Sleep Enable
+    /* 141-144 Reserved */
+    FACTORY_TEMP_I                 = 145, // 0x91-�µ� �� Read
+    FACTORY_XXX_I 		   = 146,
+    /* 147-153 Reserved */
+    FACTORY_GPS_APP_MAP_CHECK_I    = 154, // 0x9A-GPS App, Map ���� Ȯ��
+    FACTORY_CONTENTS_CHECK_I       = 155, // 0x9B-Contents �̻� ���� Ȯ��
+    FACTORY_AGPS_TEST_SET_I        = 156, // 0x9C A-GPS C/No Test ���� ����
+    FACTORY_AGPS_TEST_CHECK_I      = 157, // 0x9D A-GPS C/No Test ���� Ȯ��
+    FACTORY_AGPS_MEASURE_I         = 158, // 0x9E A-GPS C/No������ Ȯ��
+    FACTORY_AGPS_TEST_RELEASE_I    = 159, // 0x9F C/No Test ���� ���� 
+    FACTORY_CHECKSUM_READ_I        = 160, // 0xA0-SECTION �� CHECKSUM ����
+    FACTORY_CHECK_GPIO_I 	   = 161, // PS1 GPIO Check command
+    /* 162-175 Reserved */
+    FACTORY_USIM_MODE_SET_I        = 176, // 0xB0-USIM Mode����
+    FACTORY_USIM_MODE_CHECK_I      = 177, // 0xB1-USIM Mode Ȯ��
+    FACTORY_USIM_CARD_CHECK_I      = 178, // 0xB2-USIM Card Ȯ��
+    FACTORY_USIM_PERSO_CONTROL_I   = 179, // 0xB3_ME Personalization�� ����
+    FACTORY_SDCARD_CHECK_I         = 180, // 0xB4-SD Card �������� �� �뷮 Ȯ��
+    FACTORY_DUAL_USIM_CARD_CHECK_I = 181, // 0xB5-Dual USIM Card Ȯ��
+    FACTORY_ETHERNET_RD_I 	   = 182, // 0xB6 - Ethernet Mac Read Command
+    FACTORY_ETHERNET_WR_I	   = 183, // 0xB7 - Ethernet Mac Write Command
+    FACTORY_OTADM_AKEY_RD_I	   = 184, // 0xB8 - OTADM Auth Key Read Command
+    FACTORY_SECURE_BOOT_KEY_I	   = 185, // 0xB9 - SBK(128 bits) Read / Write Command
+    FACTORY_DEVICE_KEY_I	   = 186, // 0xBA - DK(32 bits) Read / Write Command
+    FACTORY_IS_SECURE_MODE_I	   = 187, // 0xBB - SECURE Mode Check Command
+    FACTORY_WV_KEY_I		   = 188, // 0xBC - WV Key(144 bytes) Read/Write Command
+    FACTORY_POWER_OFF_I		   = 189, // 0xBD . PAD ���� ���� Power Off Command
+    FACTORY_DTCPIP_KEY_I	   = 190, // 0xBE . (DLNA) DTCP-IP Key Read/Write command
+    FACTORY_EXT_VERSION_I	   = 191, // 0xBF . External Firmware Version ���� Ȯ��
+    FACTORY_OS_VERSION_I	   = 192, // 0xC0 . OS Version ���� Ȯ��
+    FACTORY_VPEN_CAL_BACKUP_I	   = 193, // 0xC1 - V-PEN Cal Data Backup command
+    FACTORY_BAROMETER_I		   = 194, // 0xC2 - Barometer Cal Value Ȯ��
+    FACTORY_DEF_SSID_I		   = 195, // 0xC3 - Verizon�� Default SSID Read Command
+    FACTORY_DEF_WA_PASSWORD_I	   = 196, // 0xC4 - Verizon�� Default WiFi/Admin Password Read
+    FACTORY_LOG_MSG_ONOFF_I	   = 197, // 0xC5 - Log Message On/Off Command
+    FACTORY_WIDEVINE_DRM_KB_I	   = 198, // 0xC6 . Widevine DRM Keybox Read/Write
+    FACTORY_HW_REV_ID_I		   = 199, // 0xC7 . HW Revision / RAM ID Check
+    FACTORY_BAUDRATE_CHANGE_I      = 200, // 0xC8-Baudrate change
+    FACTORY_VOLUME_MAX_I           = 201, // 0xC9-Voice Call ���� �ִ��� ����
+    FACTORY_SERIAL_NUMBER_I        = 202, // 0xCA-�Ϻ��� ���� ������ȣ Read/Write Command
+    FACTORY_MODEL_NAME_I           = 203, // 0xCB-�𵨸� Read Command
+    FACTORY_DRM_SET_CHECK_I	   = 204, // 0xCC-Widevine DRM Level1 ���� ���� Ȯ��
+    FACTORY_TOUCHFW_UPDATE_I	   = 205, // 0xCD-EF33S/EF34K Touch IC FW Update
+    FACTORY_CAMERA_FLASH_I	   = 206, // 0xCE-Camera Flash On/Off command
+    FACTORY_APP_CHECK_I		   = 207, // 0xCF . Default Application Check Command
+    FACTORY_BAROMETER_VAL_I	   = 208, // ���м��� Value Read Command
+    FACTORY_BAROMETER_CAL_I	   = 209, // ���м��� Calibration Command
+    FACTORY_PIN_CODE_READ_I        = 210, // 0xD2-�Ϻ��� PIN Code Read ����
+    FACTORY_WCDMA_MIN_READ_I       = 211, // 0xD3-������ WCDMA���� ��ȭ��ȣ�� �о����� ����
+    FACTORY_FUSE_BLOW_I		   = 212, // Secure Boot Mode ��ȯ�� ���� Fuse Blow ����	
+    FACTORY_FUSE_BLOW_CHECK_I	   = 213, // �������� Fuse Blow ���� Ȯ��
+    FACTORY_JTAG_ACTIVATION_I	   = 214, // Secure Boot Mode ��ȯ�� ���� J-Tag ���� ����
+    FACTORY_MOVIENAND_FORMAT_I     = 215, // 0xD7 MovieNAND Memory Format Command
+    FACTORY_SHORTCUT_DIAL_I        = 216, // 0xD8 Auto Call �������� �ܸ��� -> �������� ������ ���� Call(911�Ǵ¡�) �ɱ� ���� Command
+    FACTORY_WIFI_MAC2_RD_I	   = 217, // Gobal2 WiFi Mac Read Command
+    FACTORY_WIFI_MAC2_WR_I	   = 218, // Gobal2 WiFi Mac Write Command
+    FACTORY_1SEG_CPRM_KEY_I	   = 219, // 1-Seg CPRM Device Key Read/Write Command
+    FACTORY_IMEI_RD_I              = 220, // Dual USIM�� ����First IMEI Read Command
+    FACTORY_IMEI_WR_I              = 221, // Dual USIM�� ����First IMEI Write Command
+    FACTORY_IMEI_2_RD_I            = 222, // Dual USIM�� ����Second IMEI Read Command
+    FACTORY_IMEI_2_WR_I            = 223, // Dual USIM�� ����Second IMEI Write Command
+    FACTORY_WIFI_MAC_RD_I          = 224, // WiFi Mac Read Command
+    FACTORY_WIFI_MAC_WR_I          = 225, // WiFi Mac Write Command
+    FACTORY_HDET_AUTO_CAL_I        = 226, // MSM, MDM HDET Auto Cal�� �� ���������� ����
+    FACTORY_RF_PATH_INIT_I         = 227, // RF Switch �ʱ�ȭ. �̰� ���ϸ� MDM Rx Div ���� �ȵ�
+    FACTORY_EFS_ERASE_I            = 228, // DM���忡�� EFS �ʱ�ȭ ����.
+    FACTORY_MAGIC_BLOCK_ERASE_I    = 229, // MAGIC BLOCK ���� �ʱ�ȭ.
+    FACTORY_ANDROID_SHUTDOWN_I     = 230, // File System ����ȭ�� ���� Command
+    FACTORY_PATTERN_UNLOCK_I       = 231, // PATTERN ���� ���� ����
+    FACTORY_WIFI_AP_INFO_I         = 232, // Scan�� AP�� SSID �� RSSI Level Ȯ��
+    FACTORY_WIFI_CONNECT_I         = 233, // SSID�� �̿��Ͽ� �ش� AP�� �����ϱ�
+    FACTORY_RX_AGC_VERIFY_I        = 234, // RX AGC Ȯ�� Command
+    FACTORY_SENSOR_CHECK_I         = 235, // ������ Sensor�� �ν� ���θ� Ȯ���Ͽ� ������ Return
+    FACTORY_DO_NV_BACKUP_I         = 236, // NV�� ���� ������ ����
+    FACTORY_SET_CAL_FLAG_I         = 237, // ���� �Ϸ� Flag ���� ? Set / Reset
+    FACTORY_GET_OPER_MODE_I	   = 238, // �ܸ��� Operating Mode ���¸� Ȯ��
+    FACTORY_I2C_I 		   = 239, // I2C ������ �̿��ϴ� IC�� ���� ���� ���η� ���� ����
+    FACTORY_MONITORING_ONOFF_I     = 240, // 0xF0-�Ϻ��� Usb�� serial diag���Ž� ������������ �����͸� �����Ͱ� �߻��ϴ°� �����ϴ� ����
+    FACTORY_AIRPLANE_MODE_I	   = 241, // �ܸ��� ������ Sleep Mode�� ��ȯ�ǰ� ��
+    FACTORY_FUNCTION_FLAG_I        = 242, // FUNCTION TEST�� ������ PASS/FAIL�� �׸��� ���� TEST �Ϸ��� �� ������ FLAG�� ����
+    FACTORY_SYSTEM_PARAMETER_I     = 244, // System Parameter Ȯ�� Command
+    FACTORY_MICP_CONTROL_I	   = 245, // 1st, 2nd MIC Path Control(Enable/Disable)
+    FACTORY_ICC_ID_I               = 246, // ������ Simcard Serial Number ID Read Command
+    FACTORY_PREF_MODE_I            = 247, // prefer mode ���� Command
+    FACTORY_IR_CAL_I		   = 248, // IR Sensor Calibration Command
+    FACTORY_ADB_ROOT_CHANGE_I	   = 249, // ADB���� root ���� ���� �ϵ��� ����
+    FACTORY_ADB_ENABLE_I	   = 250, // ADB Enable Command
+    FACTORY_ADB_DISABLE_I	   = 251, // ADB Disable Command
+    FACTORY_TEMPMIN_RD_I           = 252, // �Ϻ��� ���� TempMIN Read Command
+    FACTORY_TEMPMIN_WR_I           = 253, // �Ϻ��� ���� TempMIN Write Command
+    FACTORY_DMP_CHANGE_I           = 254, // DM Port ���� Command
+    FACTORY_CAMERA_SN_READ_I       = 255, 	// CAMERA SN Read
+
+	FACTORY_COMMAND_SIZE_I,
+};
+
+/*  Sub Command - MAINTENANCE SECTOR */
+enum
+{
+    FACTORY_MSECTOR_SETID_I,       // 00 - 0x00
+    FACTORY_MSECTOR_PCBA_I,        // 01 - 0x01
+    FACTORY_MSECTOR_ASSY_I,        // 02 - 0x02
+    FACTORY_MSECTOR_TEST_I,        // 03 - 0x03
+    FACTORY_MSECTOR_BSN_I,         // 04 - 0x04
+    FACTORY_MSECTOR_MINPOWER_I,    // 05 - 0x05
+    FACTORY_MSECTOR_MAXPOWER_I,    // 06 - 0x06
+    FACTORY_MSECTOR_COMP1_I,       // 07 - 0x07
+    FACTORY_MSECTOR_COMP2_I,       // 08 - 0x08
+    FACTORY_MSECTOR_COMP3_I,       // 09 - 0x09
+    FACTORY_MSECTOR_REPAIR1_I,     // 10 - 0x0A
+    FACTORY_MSECTOR_REPAIR2_I,     // 11 - 0x0B
+    FACTORY_MSECTOR_REPAIR3_I,     // 12 - 0x0C
+    FACTORY_MSECTOR_AS1_I,         // 13 - 0x0D
+    FACTORY_MSECTOR_AS2_I,         // 14 - 0x0E
+    FACTORY_MSECTOR_AS3_I,         // 15 - 0x0F
+    FACTORY_MSECTOR_MODEL_I,       // 16 - 0x10
+    FACTORY_MSECTOR_PROCESS_FLAG_I,// 17 - 0x11
+};
+
+/* If the command is controlled at MSM modem, add the sub command below. */
+static int skyfwddiagcmd[] =
+{
+#if defined(CONFIG_MACH_MSM8X60_EF33S) || defined(CONFIG_MACH_MSM8X60_EF34K) || defined(CONFIG_MACH_MSM8X60_EF35L)
+    FACTORY_MSECTOR_WRITE_I,
+    FACTORY_MSECTOR_READ_I,
+    FACTORY_CHECKSUM_READ_I,
+    FACTORY_CAL_CHECK_FLAG_I,
+    //FACTORY_CUTOFF_SWITCH_I,
+    //FACTORY_SLEEP_MODE_I,
+    FACTORY_TEMP_I,
+    FACTORY_AGPS_TEST_SET_I,
+    FACTORY_AGPS_TEST_CHECK_I,
+    FACTORY_AGPS_MEASURE_I,
+    FACTORY_AGPS_TEST_RELEASE_I,
+    FACTORY_USIM_CARD_CHECK_I,
+    //FACTORY_PMIC_INIT_I,
+    //FACTORY_FUNCTION_FLAG_I,
+    FACTORY_SYSTEM_PARAMETER_I,
+    //FACTORY_TWND_RD_I,
+    //FACTORY_TWND_WR_I,
+
+    //FEATURE_SKY_CP_FACTORY_DIAG_PROTOCOL[
+    FACTORY_FINAL_I,
+    FACTORY_FINAL_CHECK_I,
+    FACTORY_OPENING_DAY_READ_I,
+    FACTORY_USIM_MODE_SET_I,
+    FACTORY_USIM_MODE_CHECK_I,
+    FACTORY_WCDMA_MIN_READ_I,
+    FACTORY_USIM_PERSO_CONTROL_I,
+    FACTORY_RSSIBAR_READ_I,
+    FACTORY_CS_AUTO_CALL3_I,
+    FACTORY_PREF_MODE_I,
+    FACTORY_SHORTCUT_DIAL_I,
+    //]
+    FACTORY_ANDROID_SHUTDOWN_I,
+    FACTORY_PATTERN_UNLOCK_I, //ds2 team shs
+    FACTORY_DO_NV_BACKUP_I,
+    FACTORY_SET_CAL_FLAG_I,
+#elif defined(CONFIG_MACH_MSM8X60_EF65L)
+    FACTORY_MSECTOR_WRITE_I,
+    FACTORY_MSECTOR_READ_I,
+    FACTORY_CHECKSUM_READ_I,
+    //FACTORY_CUTOFF_SWITCH_I,
+    //FACTORY_SLEEP_MODE_I,
+    FACTORY_TEMP_I,
+    FACTORY_AGPS_TEST_SET_I,
+    FACTORY_AGPS_TEST_CHECK_I,
+    FACTORY_AGPS_MEASURE_I,
+    FACTORY_AGPS_TEST_RELEASE_I,
+    //FACTORY_USIM_CARD_CHECK_I,
+#ifndef FEATURE_LGU_CP_PROCESS_CMD_WITH_RPC
+    //FACTORY_SYSTEM_PARAMETER_I,
+#endif
+    //FACTORY_TWND_RD_I,
+    //FACTORY_TWND_WR_I,
+#ifndef FEATURE_LGU_CP_PROCESS_CMD_WITH_RPC
+    //FACTORY_FINAL_I,
+    //FACTORY_FINAL_CHECK_I,
+    //FACTORY_OPENING_DAY_READ_I,
+    //FACTORY_USIM_MODE_SET_I,
+    //FACTORY_USIM_MODE_CHECK_I,
+    //FACTORY_WCDMA_MIN_READ_I,
+    //FACTORY_USIM_PERSO_CONTROL_I,
+#endif
+    FACTORY_RSSIBAR_READ_I,
+#ifndef FEATURE_LGU_CP_PROCESS_CMD_WITH_RPC
+    //FACTORY_CS_AUTO_CALL3_I,
+    //FACTORY_PREF_MODE_I,
+    //FACTORY_SHORTCUT_DIAL_I,	
+#endif
+    FACTORY_ANDROID_SHUTDOWN_I,
+    FACTORY_PATTERN_UNLOCK_I, //ds2 team shs
+    FACTORY_RF_PATH_INIT_I,
+    FACTORY_HDET_AUTO_CAL_I,
+    FACTORY_RX_AGC_VERIFY_I,
+    FACTORY_DO_NV_BACKUP_I,
+    FACTORY_SET_CAL_FLAG_I,
+    FACTORY_GET_OPER_MODE_I,
+#else
+#endif
+    0x00
+};
+#endif
+
 #define CREATE_MSG_MASK_TBL_ROW(XX)					\
-do {									\
+    do {									\
 	*(int *)(msg_mask_tbl_ptr) = MSG_SSID_ ## XX;			\
 	msg_mask_tbl_ptr += 4;						\
 	*(int *)(msg_mask_tbl_ptr) = MSG_SSID_ ## XX ## _LAST;		\
 	msg_mask_tbl_ptr += 4;						\
 	/* increment by MAX_SSID_PER_RANGE cells */			\
 	msg_mask_tbl_ptr += MAX_SSID_PER_RANGE * sizeof(int);		\
-} while (0)
+    } while (0)
 
 #define ENCODE_RSP_AND_SEND(buf_length)				\
-do {									\
+    do {									\
 	send.state = DIAG_STATE_START;					\
 	send.pkt = driver->apps_rsp_buf;				\
 	send.last = (void *)(driver->apps_rsp_buf + buf_length);	\
 	send.terminate = 1;						\
 	if (!driver->in_busy_1) {					\
-		enc.dest = driver->buf_in_1;				\
-		enc.dest_last = (void *)(driver->buf_in_1 + APPS_BUF_SIZE - 1);\
-		diag_hdlc_encode(&send, &enc);				\
-		driver->write_ptr_1->buf = driver->buf_in_1;		\
-		driver->write_ptr_1->length = (int)(enc.dest - \
-						(void *)(driver->buf_in_1)); \
-		driver->in_busy_1 = 1;					\
-		diag_device_write(driver->buf_in_1, MODEM_DATA, \
-						 driver->write_ptr_1); \
-		memset(driver->apps_rsp_buf, '\0', APPS_BUF_SIZE);	\
+	    enc.dest = driver->buf_in_1;				\
+	    enc.dest_last = (void *)(driver->buf_in_1 + APPS_BUF_SIZE - 1);\
+	    diag_hdlc_encode(&send, &enc);				\
+	    driver->write_ptr_1->buf = driver->buf_in_1;		\
+	    driver->write_ptr_1->length = (int)(enc.dest - \
+		    (void *)(driver->buf_in_1)); \
+	    driver->in_busy_1 = 1;					\
+	    diag_device_write(driver->buf_in_1, MODEM_DATA, \
+		    driver->write_ptr_1); \
+	    memset(driver->apps_rsp_buf, '\0', APPS_BUF_SIZE);	\
 	}								\
-} while (0)
+    } while (0)
 
 #define CHK_OVERFLOW(bufStart, start, end, length) \
-((bufStart <= start) && (end - start >= length)) ? 1 : 0
+    ((bufStart <= start) && (end - start >= length)) ? 1 : 0
 
 /* Determine if this device uses a device tree */
 #ifdef CONFIG_OF
 static int has_device_tree(void)
 {
-	struct device_node *node;
+    struct device_node *node;
 
-	node = of_find_node_by_path("/");
-	if (node) {
-		of_node_put(node);
-		return 1;
-	}
-	return 0;
+    node = of_find_node_by_path("/");
+    if (node) {
+	of_node_put(node);
+	return 1;
+    }
+    return 0;
 }
 #else
 static int has_device_tree(void)
@@ -117,8 +385,8 @@ int chk_config_get_id(void)
 {
 	/* For all Fusion targets, Modem will always be present */
 	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()
-#ifdef CONFIG_MACH_MSM8X60_EF65L
-		|| machine_is_msm8x60_ef65l()
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)
+		|| machine_is_msm8x60_ef39s() || machine_is_msm8x60_ef40s() || machine_is_msm8x60_ef40k() || machine_is_msm8x60_ef65l()
 #endif
 	)
 		return 0;
@@ -387,8 +655,8 @@ int diag_device_write(void *buf, int proc_num, struct diag_request *write_ptr)
 		else if (proc_num == SDIO_DATA) {
 			if (machine_is_msm8x60_fusion() ||
 					 machine_is_msm8x60_fusn_ffa()
-#ifdef CONFIG_MACH_MSM8X60_EF65L
-					|| machine_is_msm8x60_ef65l()
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)
+					|| machine_is_msm8x60_ef39s() || machine_is_msm8x60_ef40s() || machine_is_msm8x60_ef40k() || machine_is_msm8x60_ef65l()
 #endif
 					 ) {
 				write_ptr->buf = buf;
@@ -975,173 +1243,6 @@ void diag_send_msg_mask_update(smd_channel_t *ch, int updated_ssid_first,
 	mutex_unlock(&driver->diag_cntl_mutex);
 }
 
-#if 1  //im.seho nv_backup 20111003
-//#ifdef CONFIG_PANTECH_SKY
-enum
-{
-  FACTORY_CS_AUTO_INFO_I         = 1,
-  FACTORY_CS_AUTO_LAYER1_I       = 2, // 0x2-遭疑獣娃, 婚 仙持 獣娃, 徹 喚鍵 判呪
-  FACTORY_CS_AUTO_LAYER2_I       = 3, // 0x3-Slide(Folder) 鯵二 判呪, 賎希 端衣 判呪
-  FACTORY_CS_AUTO_LAYER3_I       = 4, // 0x4-朝五虞 姥疑 獣娃, LCD Backlight 繊去獣娃
-  FACTORY_CS_AUTO_MEMORY_I       = 5, // 0x5-五乞軒 紫遂 遂勲
-  FACTORY_CS_AUTO_CALL1_I        = 6, // 0x6-恥 搭鉢 獣娃/闇呪, 慎雌 搭鉢 獣娃
-  FACTORY_CS_AUTO_CALL2_I        = 7, // 0x7-SMS 呪/降重 闇呪, WAP 羨紗 闇呪
-  FACTORY_CS_AUTO_CALL3_I        = 8, // 0x8-巷識昔斗掛 獣娃, NO SVC/Call Drop 降持 判呪
-  FACTORY_CS_AUTO_RESET_I        = 9, // 0x9-s/w reset, 穿据 ON/OFF 判呪, h/w reset
-  FACTORY_CS_AUTO_ERRLOG_I       = 10, // 0xA-拭君 稽益
-  FACTORY_CS_AUTO_CALL4_I        = 11, // 0xB-Call drop 貢 降重 叔鳶
-  FACTORY_CS_AUTO_CALL5_I        = 12, // 0xC-降重 貢 鐸重 失因
-  FACTORY_MSECTOR_WRITE_I        = 20, // 0x14-MSector Write Flag
-  FACTORY_MSECTOR_READ_I         = 21, // 0x15-MSector Read Flag
-  FACTORY_CHECK_CAL_FLAG_I       = 30, // 0x1E-Cal 刃戟食採 溌昔
-  FACTORY_FIRMWARE_VER_I         = 39, // 0x27-FIRMWARE 獄穿 溌昔
-  FACTORY_M3A_NAND_VER_I         = 40, // 0x28-2nd NAND/TCC Version 獄穿 溌昔
-  FACTORY_FINAL_I                = 48, // 0x30-窒馬竺舛淫恵 段奄鉢
-  FACTORY_FINAL_CHECK_I          = 49, // 0x31-窒馬竺舛淫恵 溌昔
-  FACTORY_INIT_ALL_I             = 55, // 0x37-穿端 段奄鉢.
-  FACTORY_INIT_RESET_I           = 56, // 0x38-段奄鉢 刃戟 板 H/W 軒実
-  FACTORY_INIT_SYS_CHECK_I       = 58, // 0x3A-獣什奴段奄鉢 溌昔
-  FACTORY_RSSIBAR_READ_I         = 60, // 0x3C-RSSI BAR Read
-  FACTORY_OPENING_DAY_READ_I     = 64, // 0x40-Opening Day Read
-  FACTORY_BD_ADDR_RD_I           = 90, // 0x5A-Bluetooth Device Address Read
-  FACTORY_BD_ADDR_WR_I           = 91, // 0x5B-Bluetooth Device Address Write
-  FACTORY_BT_TEST_SET_I          = 92, // 0x5C-Bluetooth 乞球 竺舛
-  FACTORY_BT_TEST_RELEASE_I      = 93, // 0x5D-Bluetooth 乞球 背薦
-  FACTORY_BT_TEST_CHECK_I        = 94, // 0x5E-Bluetooth 乞球 溌昔
-  FACTORY_WIFI_MODESET_I         = 96, // 0x60-RX/TX DUT Mode竺舛
-  FACTORY_WIFI_TXCTRL_I          = 97, // 0x61-TX Mode 竺舛 板 TX Power 薦嬢(ON/OFF)
-  FACTORY_WIFI_RXRPT_I           = 98, // 0x62-RX Mode 竺舛 板 BER 著舛
-  FACTORY_WIFI_RELEASE_I         = 99, // 0x63-Test 刃戟 板 Test Mode 背薦
-  FACTORY_BOOT_CHECK_I           = 100, // 0x64-採特戚 刃戟鞠嬢辞 TEST亜管 乞球昔走 溌昔
-  FACTORY_KEY_PRESS_I            = 110, // 0x6E-Command研 戚遂馬食 徹研 疑拙獣鉄
-  FACTORY_LCD_I                  = 115, // 0x73-LCD研 On/Off
-  FACTORY_SPEAKER_I              = 120, // 0x78-Speaker研 戚遂背 製据聖 窒径
-  FACTORY_IRDA_I                 = 125, // 0x7D-IRDA Port稽 汽戚斗 勺呪重 Test
-  FACTORY_BATTERY_BAR_I          = 135, // 0x87-Battery bar 鯵呪研 硝焼蛙
-  FACTORY_BATTERY_ADC_I          = 136, // 0x88-Battery ADC Value
-  FACTORY_CUTOFF_SWITCH_I        = 137, // 0x89-Battery Cutoff ADC 端滴 搾醗失鉢
-  FACTORY_SLEEP_MODE_I           = 140, // 0x8C-Sleep Mode Enable/Disable
-  FACTORY_TEMP_I                 = 145, // 0x91-紳亀 葵 Read
-  FACTORY_GPS_APP_MAP_CHECK_I    = 154, // 0x9A-GPS App, Map 雌殿 溌昔
-  FACTORY_CONTENTS_CHECK_I       = 155, // 0x9B-Contents 戚雌 政巷 溌昔
-  FACTORY_AGPS_TEST_SET_I        = 156, // 0x9C A-GPS C/No Test 乞球 竺舛
-  FACTORY_AGPS_TEST_CHECK_I      = 157, // 0x9D A-GPS C/No Test 乞球 溌昔
-  FACTORY_AGPS_MEASURE_I         = 158, // 0x9E A-GPS C/No著舛葵 溌昔
-  FACTORY_AGPS_TEST_RELEASE_I    = 159, // 0x9F C/No Test 乞球 背薦 
-  FACTORY_CHECKSUM_READ_I        = 160, // 0xA0-SECTION 紺 CHECKSUM 域至
-  FACTORY_USIM_MODE_SET_I        = 176, // 0xB0-USIM Mode竺舛
-  FACTORY_USIM_MODE_CHECK_I      = 177, // 0xB1-USIM Mode 溌昔
-  FACTORY_USIM_CARD_CHECK_I      = 178, // 0xB2-USIM Card 溌昔
-  FACTORY_USIM_PERSO_CONTROL_I   = 179, // 0xB3_ME Personalization聖 薦嬢
-  FACTORY_SDCARD_CHECK_I         = 180, // 0xB4-SD Card 諮脊政巷 貢 遂勲 溌昔
-  FACTORY_DUAL_USIM_CARD_CHECK_I = 181, // 0xB5-Dual USIM Card 溌昔
-  FACTORY_BAUDRATE_CHANGE_I      = 200, // 0xC8-Baudrate change
-  FACTORY_VOLUME_MAX_I           = 201, // 0xC9-Voice Call 製勲 置企稽 竺舛
-  FACTORY_SERIAL_NUMBER_I        = 202, // 0xCA-析沙狽 乞季 薦繕腰硲 Read/Write Command
-  FACTORY_MODEL_NAME_I           = 203, // 0xCB-乞季誤 Read Command
-  FACTORY_PMIC_INIT_I            = 204, // 0xCC-PMIC 段奄鉢 誤敬.
-  FACTORY_PIN_CODE_READ_I        = 210, // 0xD2-析沙狽 PIN Code Read 誤敬
-  FACTORY_WCDMA_MIN_READ_I       = 211, // 0xD3-鎧呪狽 WCDMA乞季 穿鉢腰硲研 石嬢神澗 誤敬
-  FACTORY_MOVIENAND_FORMAT_I     = 215, // 0xD7 MovieNAND Memory Format Command
-  FACTORY_SHORTCUT_DIAL_I        = 216, // 0xD8 Auto Call 因舛拭辞 舘源奄 -> 域著奄稽 悪薦稽 舘逐 Call(911暁澗・) 杏奄 是廃 Command
-  FACTORY_IMEI_RD_I              = 220, // Dual USIM税 井酔First IMEI Read Command
-  FACTORY_IMEI_WR_I              = 221, // Dual USIM税 井酔First IMEI Write Command
-  FACTORY_IMEI_2_RD_I            = 222, // Dual USIM税 井酔Second IMEI Read Command
-  FACTORY_IMEI_2_WR_I            = 223, // Dual USIM税 井酔Second IMEI Write Command
-  FACTORY_WIFI_MAC_RD_I          = 224, // WiFi Mac Read Command
-  FACTORY_WIFI_MAC_WR_I          = 225, // WiFi Mac Write Command
-  FACTORY_HDET_AUTO_CAL_I        = 226, // MSM, MDM HDET Auto Cal聖 肉 鎧採旋生稽 呪楳
-  FACTORY_RF_PATH_INIT_I         = 227, // RF Switch 段奄鉢. 戚暗 照馬檎 MDM Rx Div 繕舛 照喫
-  FACTORY_ANDROID_SHUTDOWN_I     = 230, // File System 疑奄鉢研 是廃 Command
-  FACTORY_PATTERN_UNLOCK_I       = 231, // PATTERN 節榎 竺舛 背薦
-  FACTORY_WIFI_AP_INFO_I         = 232, // Scan吉 AP税 SSID 貢 RSSI Level 溌昔
-  FACTORY_WIFI_CONNECT_I         = 233, // SSID研 戚遂馬食 背雁 AP拭 尻衣馬奄
-  FACTORY_RX_AGC_VERIFY_I        = 234, // RX AGC 溌昔 Command
-  FACTORY_SENSOR_CHECK_I         = 235, // 旋遂吉 Sensor税 昔縦 食採研 溌昔馬食 衣引葵 Return
-  FACTORY_DO_NV_BACKUP_I         = 236, // NV研 拷穣 慎蝕拭 差紫
-  FACTORY_SET_CAL_FLAG_I         = 237, // 繕舛 刃戟 Flag 竺舛 ? Set / Reset
-  FACTORY_GET_OPER_MODE_I        = 238,
-  FACTORY_MONITORING_ONOFF_I     = 240, // 0xF0-析沙狽 Usb貢 serial diag搭重獣 肉鎧採旋生稽 乞艦斗元 汽戚斗亜 降持馬澗杏 号走馬澗 誤敬
-  FACTORY_FUNCTION_FLAG_I        = 242, // FUNCTION TEST板 衣引亜 PASS/FAIL昔 牌鯉拭 企背 TEST 刃戟板 益 衣引研 FLAG稽 煽舌
-  FACTORY_GS_COMPENSATION_I      = 243, // GlideSensor Compensation Command
-  FACTORY_SYSTEM_PARAMETER_I     = 244, // System Parameter 溌昔 Command
-  FACTORY_MICP_CONTROL_I         = 245, // 1st, 2nd MIC Path Control(Enable/Disable)
-  FACTORY_ICC_ID_I               = 246, // 杉球肉 Simcard Serial Number ID Read Command
-  FACTORY_PREF_MODE_I            = 247, // prefer mode 竺舛 Command
-  FACTORY_BOOT_MODE_I            = 248, // Boot Mode Setting
-  FACTORY_BOOT_MODE_CHECK_I      = 249, // Current Boot Mode Check
-  FACTORY_TWND_RD_I              = 250, // Touch Window Cal Value Read Command
-  FACTORY_TWND_WR_I              = 251, // Touch Window Cal Value Write Command
-  FACTORY_TEMPMIN_RD_I           = 252, // 析沙狽 乞季 TempMIN Read Command
-  FACTORY_TEMPMIN_WR_I           = 253, // 析沙狽 乞季 TempMIN Write Command
-  FACTORY_DMP_CHANGE_I           = 254, // DM Port 痕井 Command
-  FACTORY_CAMERA_SN_READ_I       = 255 	// CAMERA SN Read
-};
-enum
-{
-  FACTORY_MSECTOR_SETID_I,       // 00 - 0x00
-  FACTORY_MSECTOR_PCBA_I,        // 01 - 0x01
-  FACTORY_MSECTOR_ASSY_I,        // 02 - 0x02
-  FACTORY_MSECTOR_TEST_I,        // 03 - 0x03
-  FACTORY_MSECTOR_BSN_I,         // 04 - 0x04
-  FACTORY_MSECTOR_MINPOWER_I,    // 05 - 0x05
-  FACTORY_MSECTOR_MAXPOWER_I,    // 06 - 0x06
-  FACTORY_MSECTOR_COMP1_I,       // 07 - 0x07
-  FACTORY_MSECTOR_COMP2_I,       // 08 - 0x08
-  FACTORY_MSECTOR_COMP3_I,       // 09 - 0x09
-  FACTORY_MSECTOR_REPAIR1_I,     // 10 - 0x0A
-  FACTORY_MSECTOR_REPAIR2_I,     // 11 - 0x0B
-  FACTORY_MSECTOR_REPAIR3_I,     // 12 - 0x0C
-  FACTORY_MSECTOR_AS1_I,         // 13 - 0x0D
-  FACTORY_MSECTOR_AS2_I,         // 14 - 0x0E
-  FACTORY_MSECTOR_AS3_I,         // 15 - 0x0F
-  FACTORY_MSECTOR_MODEL_I,       // 16 - 0x10
-  FACTORY_MSECTOR_PROCESS_FLAG_I,// 17 - 0x11
-};
-static int skyfwddiagcmd[] =
-{
-	FACTORY_MSECTOR_WRITE_I,
-	FACTORY_MSECTOR_READ_I,
-	FACTORY_CHECKSUM_READ_I,
-	FACTORY_CUTOFF_SWITCH_I,
-	FACTORY_SLEEP_MODE_I,
-	FACTORY_TEMP_I,
-	FACTORY_AGPS_TEST_SET_I,
-	FACTORY_AGPS_TEST_CHECK_I,
-	FACTORY_AGPS_MEASURE_I,
-	FACTORY_AGPS_TEST_RELEASE_I,
-	//FACTORY_USIM_CARD_CHECK_I,
-#ifndef FEATURE_LGU_CP_PROCESS_CMD_WITH_RPC
-  //FACTORY_SYSTEM_PARAMETER_I,
-#endif
- 	FACTORY_TWND_RD_I,
-	FACTORY_TWND_WR_I,
-#ifndef FEATURE_LGU_CP_PROCESS_CMD_WITH_RPC
-	//FACTORY_FINAL_I,
-	//FACTORY_FINAL_CHECK_I,
-	//FACTORY_OPENING_DAY_READ_I,
-	//FACTORY_USIM_MODE_SET_I,
-	//FACTORY_USIM_MODE_CHECK_I,
-	//FACTORY_WCDMA_MIN_READ_I,
-	//FACTORY_USIM_PERSO_CONTROL_I,
-#endif
-	FACTORY_RSSIBAR_READ_I,
-#ifndef FEATURE_LGU_CP_PROCESS_CMD_WITH_RPC
-	//FACTORY_CS_AUTO_CALL3_I,
-	//FACTORY_PREF_MODE_I,
-  //FACTORY_SHORTCUT_DIAL_I,	
-#endif
-	FACTORY_ANDROID_SHUTDOWN_I,
-	FACTORY_PATTERN_UNLOCK_I, //ds2 team shs
-	FACTORY_RF_PATH_INIT_I,
-	FACTORY_HDET_AUTO_CAL_I,
-	FACTORY_RX_AGC_VERIFY_I,
-	FACTORY_DO_NV_BACKUP_I,
-	FACTORY_SET_CAL_FLAG_I,
-	FACTORY_GET_OPER_MODE_I,
-	0x00
-};
-#endif
 static int diag_process_apps_pkt(unsigned char *buf, int len)
 {
 	uint16_t subsys_cmd_code;
@@ -1348,39 +1449,40 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 #endif
 	}
 	/* Check for registered clients and forward packet to apropriate proc */
-	else{
 	cmd_code = (int)(*(char *)buf);
 	temp++;
 	subsys_id = (int)(*(char *)temp);
 	temp++;
 	subsys_cmd_code = *(uint16_t *)temp;
 	temp += 2;
-
 	data_type = APPS_DATA;
 	/* Dont send any command other than mode reset */
 	if (chk_apps_master() && cmd_code == MODE_CMD) {
-		if (subsys_id != RESET_ID)
-			data_type = MODEM_DATA;
+	    if (subsys_id != RESET_ID)
+		data_type = MODEM_DATA;
 	}
 
-//#ifdef CONFIG_PANTECH_SKY
-#if 1  //im.seho nv_backup 20111003
-		i=0;
-		if(cmd_code == 0xFA) { /* bug_fix: DIAG_FACTORY_REQ_F */
-			while(skyfwddiagcmd[i] != 0)
-			{	
-				if(subsys_id == skyfwddiagcmd[i++])
-				{
-					return packet_type;;
-				}
-			}
+
+#ifdef FEATURE_PANTECH_FACTORY_COMMAND
+	i=0;
+
+	/* Added DS2 kbkim */
+	if(cmd_code == 0xFA) { /* bug_fix: DIAG_FACTORY_REQ_F */
+	    while(skyfwddiagcmd[i] != 0)
+	    {	
+		if(subsys_id == skyfwddiagcmd[i++])
+		{
+		    //printk("mArm Fwd id: %d\n", subsys_id );
+		    return packet_type;;
 		}
+	    }
+	}
 #endif
 
 	pr_debug("diag: %d %d %d", cmd_code, subsys_id, subsys_cmd_code);
 	for (i = 0; i < diag_max_reg; i++) {
-		entry = driver->table[i];
-		if (entry.process_id != NO_PROCESS) {
+	    entry = driver->table[i];
+	    if (entry.process_id != NO_PROCESS) {
 			if (entry.cmd_code == cmd_code && entry.subsys_id ==
 				 subsys_id && entry.cmd_code_lo <=
 							 subsys_cmd_code &&
@@ -1411,7 +1513,6 @@ static int diag_process_apps_pkt(unsigned char *buf, int len)
 				}
 			}
 		}
-	}
 	}
 #if defined(CONFIG_DIAG_OVER_USB)
 	/* Check for the command/respond msg for the maximum packet length */
@@ -1800,8 +1901,8 @@ int diagfwd_connect(void)
 	queue_work(driver->diag_wq, &(driver->diag_read_work));
 #ifdef CONFIG_DIAG_SDIO_PIPE
 	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()
-#ifdef CONFIG_MACH_MSM8X60_EF65L
-		|| machine_is_msm8x60_ef65l()
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)
+		|| machine_is_msm8x60_ef39s() || machine_is_msm8x60_ef40s() || machine_is_msm8x60_ef40k() || machine_is_msm8x60_ef65l()
 #endif
 	) {
 		if (driver->mdm_ch && !IS_ERR(driver->mdm_ch))
@@ -1829,8 +1930,8 @@ int diagfwd_disconnect(void)
 	}
 #ifdef CONFIG_DIAG_SDIO_PIPE
 	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()
-#ifdef CONFIG_MACH_MSM8X60_EF65L
-	|| machine_is_msm8x60_ef65l()
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)
+		|| machine_is_msm8x60_ef39s() || machine_is_msm8x60_ef40s() || machine_is_msm8x60_ef40k() || machine_is_msm8x60_ef65l()
 #endif
 	)
 		if (driver->mdm_ch && !IS_ERR(driver->mdm_ch))
@@ -1876,10 +1977,10 @@ int diagfwd_write_complete(struct diag_request *diag_write_ptr)
 	else if (buf == (void *)driver->buf_in_sdio)
 		if (machine_is_msm8x60_fusion() ||
 			 machine_is_msm8x60_fusn_ffa()
-#ifdef CONFIG_MACH_MSM8X60_EF65L
-			|| machine_is_msm8x60_ef65l()
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)
+			|| machine_is_msm8x60_ef39s() || machine_is_msm8x60_ef40s() || machine_is_msm8x60_ef40k() || machine_is_msm8x60_ef65l()
 #endif
-		 )
+			 )
 			diagfwd_write_complete_sdio();
 		else
 			pr_err("diag: Incorrect buffer pointer while WRITE");
@@ -1922,8 +2023,8 @@ int diagfwd_read_complete(struct diag_request *diag_read_ptr)
 	else if (buf == (void *)driver->usb_buf_mdm_out) {
 		if (machine_is_msm8x60_fusion() ||
 				 machine_is_msm8x60_fusn_ffa()
-#ifdef CONFIG_MACH_MSM8X60_EF65L
-					|| machine_is_msm8x60_ef65l()
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)
+				|| machine_is_msm8x60_ef39s() || machine_is_msm8x60_ef40s() || machine_is_msm8x60_ef40k() || machine_is_msm8x60_ef65l()
 #endif
 				 ) {
 			driver->read_len_mdm = diag_read_ptr->actual;

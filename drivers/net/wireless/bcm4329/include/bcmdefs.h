@@ -20,14 +20,53 @@
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
- * $Id: bcmdefs.h,v 13.38.4.10.2.7.6.11 2010/02/01 05:51:55 Exp $
+ * $Id: bcmdefs.h,v 13.38.4.10.2.7.6.7.4.8.2.2 2010/10/01 18:12:43 Exp $
  */
 
 
 #ifndef	_bcmdefs_h_
 #define	_bcmdefs_h_
 
+
+
+
+
+
+
+#define bcmreclaimed 		0
+#define r2_reclaimed		0
+#define _data	_data
+#define _fn	_fn
+#define _data	_data
+#define _fn		_fn
+#define _fn	_fn
+#define BCMPREATTACHDATA(_data)	_data
+#define BCMPREATTACHFN(_fn)		_fn
+#define CONST	const
+
+
+
+#define _data	_data
+#define _fn		_fn
+#define _fn	_fn
 #define STATIC	static
+
+
+
+#define OVERLAY_INLINE
+#define OSTATIC			static
+#define BCMOVERLAYDATA(_ovly, _sym)	_sym
+#define BCMOVERLAYFN(_ovly, _fn)	_fn
+#define BCMOVERLAYERRFN(_fn)	_fn
+#define BCMROMOVERLAYDATA(_ovly, _data)	_data
+#define BCMROMOVERLAYFN(_ovly, _fn)		_fn
+#define BCMATTACHOVERLAYDATA(_ovly, _sym)	_sym
+#define BCMATTACHOVERLAYFN(_ovly, _fn)		_fn
+#define BCMINITOVERLAYDATA(_ovly, _sym)		_sym
+#define BCMINITOVERLAYFN(_ovly, _fn)		_fn
+#define BCMUNINITOVERLAYFN(_ovly, _fn)		_fn
+
+
 
 #define	SI_BUS			0	
 #define	PCI_BUS			1	
@@ -79,7 +118,13 @@
 #define	DMADDRWIDTH_64  64 
 
 
+
+
+#if defined(BCMCHIPID) && (BCMCHIPID == BCM4319_CHIP_ID)
+#define BCMEXTRAHDROOM 172
+#else
 #define BCMEXTRAHDROOM 164
+#endif 
 
 
 #define BCMDONGLEHDRSZ 12

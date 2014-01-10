@@ -232,6 +232,8 @@ enum charger_stat {
 
 static struct smb137b_data *usb_smb137b_chg;
 
+atomic_t smb_charger_state;
+
 static int smb137b_read_reg(struct i2c_client *client, int reg,
 	u8 *val)
 {
@@ -322,6 +324,8 @@ static int smb137b_start_charging(struct msm_hardware_charger *hw_chg,
 		goto out;
 	}
 
+	dev_err(&smb137b_chg->client->dev, "%s \n", __func__);
+       
 	if (smb137b_chg->charging == true
 		&& smb137b_chg->chgcurrent == chg_current)
 		/* we are already charging with the same current*/
@@ -330,12 +334,16 @@ static int smb137b_start_charging(struct msm_hardware_charger *hw_chg,
 			  __func__, chg_current);
 
 	dev_dbg(&smb137b_chg->client->dev, "%s\n", __func__);
-	if (chg_current < 500)
+	if (chg_current < 500) {
 		cmd_val &= ~USBIN_MODE_500_BIT;
-	else if (chg_current == 500)
+		atomic_set(&smb_charger_state, CHG_TYPE_USB);
+	} else if (chg_current == 500) {
 		cmd_val |= USBIN_MODE_500_BIT;
-	else
+		atomic_set(&smb_charger_state, CHG_TYPE_USB);
+	} else {
 		cmd_val |= USBIN_MODE_HCMODE_BIT;
+		atomic_set(&smb_charger_state, CHG_TYPE_AC);
+ }
 
 	smb137b_chg->chgcurrent = chg_current;
 	smb137b_chg->cur_charging_mode = cmd_val;
@@ -396,6 +404,8 @@ static int smb137b_stop_charging(struct msm_hardware_charger *hw_chg)
 	if (smb137b_chg->charging == false)
 		return 0;
 
+	dev_err(&smb137b_chg->client->dev, "%s \n", __func__);
+
 	smb137b_chg->charging = false;
 	smb137b_chg->batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
 	smb137b_chg->batt_chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
@@ -450,6 +460,7 @@ static irqreturn_t smb137b_valid_handler(int irq, void *dev_id)
 
 	if (val) {
 		if (smb137b_chg->usb_status != SMB137B_ABSENT) {
+			atomic_set(&smb_charger_state, CHG_TYPE_NONE);
 			smb137b_chg->usb_status = SMB137B_ABSENT;
 			msm_charger_notify_event(&smb137b_chg->adapter_hw_chg,
 					CHG_REMOVED_EVENT);
@@ -633,6 +644,8 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 
 	pdata = client->dev.platform_data;
 
+	pr_err("%s\n", __func__); 
+
 	if (pdata == NULL) {
 		dev_err(&client->dev, "%s no platform data\n", __func__);
 		ret = -EINVAL;
@@ -665,6 +678,8 @@ static int __devinit smb137b_probe(struct i2c_client *client,
 	smb137b_chg->adapter_hw_chg.start_charging = smb137b_start_charging;
 	smb137b_chg->adapter_hw_chg.stop_charging = smb137b_stop_charging;
 	smb137b_chg->adapter_hw_chg.charging_switched = smb137b_charger_switch;
+
+	atomic_set(&smb_charger_state, CHG_TYPE_NONE);
 
 	if (pdata->chg_detection_config)
 		ret = pdata->chg_detection_config();

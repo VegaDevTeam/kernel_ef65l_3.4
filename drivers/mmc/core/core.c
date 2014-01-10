@@ -51,9 +51,6 @@
 
 static struct workqueue_struct *workqueue;
 
-#ifdef CONFIG_SKY_MMC
-extern unsigned int msm8x60_sdcc_slot_status(void);
-#endif
 /*
  * Enabling software CRCs on the data blocks can be a significant (30%)
  * performance cost, and for other reasons may not always be desired.
@@ -2119,13 +2116,21 @@ int _mmc_detect_card_removed(struct mmc_host *host)
 	int ret;
 
 	if ((host->caps & MMC_CAP_NONREMOVABLE) || !host->bus_ops->alive)
+	{
+		#ifdef CONFIG_SKY_WLAN_BCM4330  // 2013-08-29 thkim_wifi add check code for checking wifi mmc card failure	  
+	    printk("%s: PANTECH _mmc_detect_card_removed MMC_CAP_NONREMOVABLE\n", mmc_hostname(host));
+		#endif
 		return 0;
+	}
 
 	if (!host->card || mmc_card_removed(host->card))
 		return 1;
 
 	ret = host->bus_ops->alive(host);
 	if (ret) {
+	    #ifdef CONFIG_SKY_WLAN_BCM4330  // 2013-08-29 thkim_wifi add check code for checking wifi mmc card failure	  
+	    printk("%s: PANTECH _mmc_detect_card_removed ret: %d \n", mmc_hostname(host), ret);
+		#endif
 		mmc_card_set_removed(host->card);
 		pr_debug("%s: card remove detected\n", mmc_hostname(host));
 	}
@@ -2174,7 +2179,7 @@ void mmc_rescan(struct work_struct *work)
 	struct mmc_host *host =
 		container_of(work, struct mmc_host, detect.work);
 	bool extend_wakelock = false;
-#ifdef CONFIG_SKY_MMC
+#ifdef FEATURE_PANTECH_MMC
 	static int first_scan = 1;
 #endif
 
@@ -2217,20 +2222,19 @@ void mmc_rescan(struct work_struct *work)
 		mmc_bus_put(host);
 		goto out;
 	}
-
-#ifdef CONFIG_SKY_MMC
-       /*host->index == 2  ->  external SD*/
-	if (host->index == 2 && first_scan){
-first_scan = 0;
-mmc_power_up(host);
-msleep(10);
-    mmc_power_off(host);
-       }
-       if (host->index == 2 && !msm8x60_sdcc_slot_status()) {
+#ifdef FEATURE_PANTECH_MMC
+	if (host->index == 1 && first_scan){
+		first_scan = 0;
+		mmc_power_up(host);
+		msleep(10);
+		mmc_power_off(host);
+	}
+	if (host->index == 1 && !msm8x60_sdcc_slot_status()) {
 		mmc_bus_put(host);
 		goto out;
 	}
 #endif
+
 	/*
 	 * Only we can add a new handler, so it's safe to
 	 * release the lock here.

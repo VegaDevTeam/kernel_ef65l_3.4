@@ -102,6 +102,9 @@
 
 static void charm_ap2mdm_kpdpwr_on(void)
 {
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+    printk("charm_ap2mdm_kpdpwr_on\n");
+#endif
 	gpio_direction_output(AP2MDM_PMIC_RESET_N, 0);
 	gpio_direction_output(AP2MDM_KPDPWR_N, 1);
 }
@@ -430,7 +433,9 @@ static struct resource gsbi4_qup_i2c_resources[] = {
 	},
 };
 
-#if defined(CONFIG_EF65L_SENSORS_MPU3050)
+#if defined (CONFIG_INPUT_SENSOR)
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF65L)
+#if defined(CONFIG_SENSORS_MPU3050)
 static struct resource gsbi5_qup_i2c_resources[] = {
 	{
 		.name	= "qup_phys_addr",
@@ -452,7 +457,9 @@ static struct resource gsbi5_qup_i2c_resources[] = {
 	},
 };
 #endif
-#if defined(CONFIG_SKY_BATTERY_MAX17043)
+#endif
+#endif
+#if defined(CONFIG_SKY_BATTERY_MAX17040) || defined(CONFIG_SKY_BATTERY_MAX17043)
 static struct resource gsbi11_qup_i2c_resources[] = {
 	 {
 		.name   = "qup_phys_addr",
@@ -473,7 +480,8 @@ static struct resource gsbi11_qup_i2c_resources[] = {
 		.flags  = IORESOURCE_IRQ,
 	},
 };
-#endif  //CONFIG_SKY_BATTERY_MAX17043
+#endif
+
 static struct resource gsbi7_qup_i2c_resources[] = {
 	{
 		.name	= "qup_phys_addr",
@@ -528,6 +536,31 @@ static struct resource gsbi8_qup_i2c_resources[] = {
 	},
 };
 
+#if defined (CONFIG_INPUT_SENSOR)
+#if defined(CONFIG_MACH_MSM8X60_EF33S) || defined(CONFIG_MACH_MSM8X60_EF34K) || defined(CONFIG_MACH_MSM8X60_EF35L)
+#if defined(CONFIG_SENSORS_MPU3050)
+static struct resource gsbi9_qup_i2c_resources[] = {
+	{
+		.name	= "qup_phys_addr",
+		.start	= MSM_GSBI9_QUP_PHYS,
+		.end	= MSM_GSBI9_QUP_PHYS + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "gsbi_qup_i2c_addr",
+		.start	= MSM_GSBI9_PHYS,
+		.end	= MSM_GSBI9_PHYS + 4 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "qup_err_intr",
+		.start	= GSBI9_QUP_IRQ,
+		.end	= GSBI9_QUP_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+#endif
+#else
 static struct resource gsbi9_qup_i2c_resources[] = {
 	{
 		.name	= "qup_phys_addr",
@@ -549,28 +582,10 @@ static struct resource gsbi9_qup_i2c_resources[] = {
 	},
 };
 
-#if defined(CONFIG_PN544)
-static struct resource gsbi10_qup_i2c_resources[] = {
-    {
-        .name   = "qup_phys_addr",
-        .start  = MSM_GSBI10_QUP_PHYS,
-        .end    = MSM_GSBI10_QUP_PHYS + SZ_4K - 1,
-        .flags  = IORESOURCE_MEM,
-    },
-    {
-        .name   = "gsbi_qup_i2c_addr",
-        .start  = MSM_GSBI10_PHYS,
-        .end    = MSM_GSBI10_PHYS + 4 - 1,
-        .flags  = IORESOURCE_MEM,
-    },
-    {
-        .name   = "qup_err_intr",
-        .start  = GSBI10_QUP_IRQ,
-        .end    = GSBI10_QUP_IRQ,
-        .flags  = IORESOURCE_IRQ,
-    },
-};
+
 #endif
+#endif
+
 
 static struct resource gsbi12_qup_i2c_resources[] = {
 	{
@@ -592,6 +607,54 @@ static struct resource gsbi12_qup_i2c_resources[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 };
+
+
+#if defined(CONFIG_PN544) 
+#if defined(CONFIG_MACH_MSM8X60_EF33S) || defined(CONFIG_MACH_MSM8X60_EF34K) || defined(CONFIG_MACH_MSM8X60_EF34C)
+static struct resource gsbi1_qup_i2c_resources[] = {
+        {
+            .name   = "qup_phys_addr",
+            .start  = MSM_GSBI1_QUP_PHYS,
+            .end    = MSM_GSBI1_QUP_PHYS + SZ_4K - 1,
+            .flags  = IORESOURCE_MEM,
+        },
+        {
+            .name   = "gsbi_qup_i2c_addr",
+            .start  = MSM_GSBI1_PHYS,
+            .end    = MSM_GSBI1_PHYS + 4 - 1,
+            .flags  = IORESOURCE_MEM,
+        },
+        {
+            .name   = "qup_err_intr",
+            .start  = GSBI1_QUP_IRQ,
+            .end    = GSBI1_QUP_IRQ,
+            .flags  = IORESOURCE_IRQ,
+        },
+};
+#elif defined(CONFIG_MACH_MSM8X60_EF39S) ||defined(CONFIG_MACH_MSM8X60_EF40S) ||defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)
+static struct resource gsbi10_qup_i2c_resources[] = {
+    {
+        .name   = "qup_phys_addr",
+        .start  = MSM_GSBI10_QUP_PHYS,
+        .end    = MSM_GSBI10_QUP_PHYS + SZ_4K - 1,
+        .flags  = IORESOURCE_MEM,
+    },
+    {
+        .name   = "gsbi_qup_i2c_addr",
+        .start  = MSM_GSBI10_PHYS,
+        .end    = MSM_GSBI10_PHYS + 4 - 1,
+        .flags  = IORESOURCE_MEM,
+    },
+    {
+        .name   = "qup_err_intr",
+        .start  = GSBI10_QUP_IRQ,
+        .end    = GSBI10_QUP_IRQ,
+        .flags  = IORESOURCE_IRQ,
+    },
+};
+#endif
+#endif
+
 
 #ifdef CONFIG_MSM_BUS_SCALING
 static struct msm_bus_vectors grp3d_init_vectors[] = {
@@ -926,6 +989,25 @@ void __init msm8x60_check_2d_hardware(void)
 	}
 }
 
+#if defined(CONFIG_PN544) 
+#if defined(CONFIG_MACH_MSM8X60_EF33S) || defined(CONFIG_MACH_MSM8X60_EF34K) || defined(CONFIG_MACH_MSM8X60_EF34C)
+struct platform_device msm_gsbi1_qup_i2c_device = {
+    .name           = "qup_i2c",
+    .id             = MSM_GSBI1_QUP_I2C_BUS_ID,
+    .num_resources  = ARRAY_SIZE(gsbi1_qup_i2c_resources),
+    .resource       = gsbi1_qup_i2c_resources,
+};
+#elif defined(CONFIG_MACH_MSM8X60_EF39S) ||defined(CONFIG_MACH_MSM8X60_EF40S) ||defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)
+struct platform_device msm_gsbi10_qup_i2c_device = {
+    .name           = "qup_i2c",
+    .id             = MSM_GSBI10_QUP_I2C_BUS_ID,
+    .num_resources  = ARRAY_SIZE(gsbi10_qup_i2c_resources),
+    .resource       = gsbi10_qup_i2c_resources,
+};
+#endif
+#endif
+
+
 /* Use GSBI3 QUP for /dev/i2c-0 */
 struct platform_device msm_gsbi3_qup_i2c_device = {
 	.name		= "qup_i2c",
@@ -942,7 +1024,9 @@ struct platform_device msm_gsbi4_qup_i2c_device = {
 	.resource	= gsbi4_qup_i2c_resources,
 };
 
-#if defined(CONFIG_EF65L_SENSORS_MPU3050)
+#if defined (CONFIG_INPUT_SENSOR)
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF65L)
+#if defined(CONFIG_SENSORS_MPU3050)
 /* Use GSBI5 QUP for /dev/i2c-1 */
 struct platform_device msm_gsbi5_qup_i2c_device = {
 	.name		= "qup_i2c",
@@ -951,14 +1035,18 @@ struct platform_device msm_gsbi5_qup_i2c_device = {
 	.resource	= gsbi5_qup_i2c_resources,
 };
 #endif
-#if defined(CONFIG_SKY_BATTERY_MAX17043)
-struct platform_device msm_gsbi11_qup_i2c_device = {
+#endif
+#endif
+
+#if defined(CONFIG_SKY_BATTERY_MAX17040) || defined(CONFIG_SKY_BATTERY_MAX17043)
+struct platform_device msm_gsbi13_qup_i2c_device = {
 	 .name           = "qup_i2c",
 	.id             = MSM_GSBI11_QUP_I2C_BUS_ID,
 	.num_resources  = ARRAY_SIZE(gsbi11_qup_i2c_resources),
 	.resource       = gsbi11_qup_i2c_resources,
 };
 #endif
+
 /* Use GSBI8 QUP for /dev/i2c-3 */
 struct platform_device msm_gsbi8_qup_i2c_device = {
 	.name		= "qup_i2c",
@@ -968,6 +1056,7 @@ struct platform_device msm_gsbi8_qup_i2c_device = {
 };
 
 /* Use GSBI9 QUP for /dev/i2c-2 */
+
 struct platform_device msm_gsbi9_qup_i2c_device = {
 	.name		= "qup_i2c",
 	.id		= MSM_GSBI9_QUP_I2C_BUS_ID,
@@ -982,16 +1071,6 @@ struct platform_device msm_gsbi7_qup_i2c_device = {
 	.num_resources	= ARRAY_SIZE(gsbi7_qup_i2c_resources),
 	.resource	= gsbi7_qup_i2c_resources,
 };
-
-#if defined(CONFIG_PN544)
-/* Use GSBI2 QUP for /dev/i2c-13 */
-struct platform_device msm_gsbi10_qup_i2c_device = {
-    .name           = "qup_i2c",
-    .id             = MSM_GSBI10_QUP_I2C_BUS_ID,
-    .num_resources  = ARRAY_SIZE(gsbi10_qup_i2c_resources),
-    .resource       = gsbi10_qup_i2c_resources,
-};
-#endif /* CONFIG_PN544 */
 
 /* Use GSBI12 QUP for /dev/i2c-5 (Sensors) */
 struct platform_device msm_gsbi12_qup_i2c_device = {
@@ -1055,6 +1134,7 @@ struct platform_device msm_device_ssbi3 = {
 };
 #endif /* CONFIG_I2C_SSBI */
 
+#if !(defined(CONFIG_PN544) && (defined(CONFIG_MACH_MSM8X60_EF33S) || defined(CONFIG_MACH_MSM8X60_EF34K) || defined(CONFIG_MACH_MSM8X60_EF34C)))
 static struct resource gsbi1_qup_spi_resources[] = {
 	{
 		.name	= "spi_base",
@@ -1119,9 +1199,54 @@ struct platform_device msm_gsbi1_qup_spi_device = {
 	.num_resources	= ARRAY_SIZE(gsbi1_qup_spi_resources),
 	.resource	= gsbi1_qup_spi_resources,
 };
+#endif
 
-#if !defined(CONFIG_PN544)
+#ifdef CONFIG_SKY_DMB_SPI_HW
+static struct resource gsbi2_qup_spi_resources[] = {
+	{
+		.name	= "spi_base",
+		.start	= MSM_GSBI2_QUP_PHYS,
+		.end	= MSM_GSBI2_QUP_PHYS + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "gsbi_base",
+		.start	= MSM_GSBI2_PHYS,
+		.end	= MSM_GSBI2_PHYS + 4 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "spi_irq_in",
+		.start	= GSBI2_QUP_IRQ,
+		.end	= GSBI2_QUP_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.name   = "spidm_channels",
+		.start  = 5,
+		.end    = 6,
+		.flags  = IORESOURCE_DMA,
+	},
+	{
+		.name   = "spidm_crci",		
+		//.start  = 8,
+		//.end    = 7,
+		.start  = 10, // change GSBI2 CRCI value (CASE 00735141)
+		.end    = 9,
+		.flags  = IORESOURCE_DMA,
+	},
+};
 
+struct platform_device msm_gsbi2_qup_spi_device = {
+	.name		= "spi_qsd",
+	.id		= 5,
+	.num_resources	= ARRAY_SIZE(gsbi2_qup_spi_resources),
+	.resource	= gsbi2_qup_spi_resources,
+};
+#endif
+
+
+#if !(defined(CONFIG_PN544) && (defined(CONFIG_MACH_MSM8X60_EF39S) ||defined(CONFIG_MACH_MSM8X60_EF40S) ||defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)))
 static struct resource gsbi10_qup_spi_resources[] = {
 	{
 		.name	= "spi_base",
@@ -1168,9 +1293,7 @@ struct platform_device msm_gsbi10_qup_spi_device = {
 	.num_resources	= ARRAY_SIZE(gsbi10_qup_spi_resources),
 	.resource	= gsbi10_qup_spi_resources,
 };
-#else
-struct platform_device msm_gsbi10_qup_spi_device = {};
-#endif	
+#endif
 
 #define MSM_SDC1_BASE         0x12400000
 #define MSM_SDC1_DML_BASE     (MSM_SDC1_BASE + 0x800)
@@ -1948,29 +2071,35 @@ int msm_add_host(unsigned int host, struct msm_usb_host_platform_data *plat)
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
 #define TSIF_0_DATA      GPIO_CFG(95, 1, GPIO_CFG_INPUT, \
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
+#if 0
 #define TSIF_0_SYNC      GPIO_CFG(96, 1, GPIO_CFG_INPUT, \
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
+#endif
+
+//EF33/34/35 TSIF PORT2
 #define TSIF_1_CLK       GPIO_CFG(97, 1, GPIO_CFG_INPUT, \
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
 #define TSIF_1_EN        GPIO_CFG(98, 1, GPIO_CFG_INPUT, \
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
 #define TSIF_1_DATA      GPIO_CFG(99, 1, GPIO_CFG_INPUT, \
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
+#if 0
 #define TSIF_1_SYNC      GPIO_CFG(100, 1, GPIO_CFG_INPUT, \
 	GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA)
+#endif
 
 static const struct msm_gpio tsif0_gpios[] = {
 	{ .gpio_cfg = TSIF_0_CLK,  .label =  "tsif_clk", },
 	{ .gpio_cfg = TSIF_0_EN,   .label =  "tsif_en", },
 	{ .gpio_cfg = TSIF_0_DATA, .label =  "tsif_data", },
-	{ .gpio_cfg = TSIF_0_SYNC, .label =  "tsif_sync", },
+	//{ .gpio_cfg = TSIF_0_SYNC, .label =  "tsif_sync", },
 };
 
 static const struct msm_gpio tsif1_gpios[] = {
 	{ .gpio_cfg = TSIF_1_CLK,  .label =  "tsif_clk", },
 	{ .gpio_cfg = TSIF_1_EN,   .label =  "tsif_en", },
 	{ .gpio_cfg = TSIF_1_DATA, .label =  "tsif_data", },
-	{ .gpio_cfg = TSIF_1_SYNC, .label =  "tsif_sync", },
+	//{ .gpio_cfg = TSIF_1_SYNC, .label =  "tsif_sync", },
 };
 
 static void tsif_release(struct device *dev)
@@ -2061,7 +2190,7 @@ struct platform_device msm_device_tsif[2] = {
 	},
 	{
 		.name          = "msm_tsif",
-		.id            = 1,
+		.id            = 0,
 		.num_resources = ARRAY_SIZE(tsif1_resources),
 		.resource      = tsif1_resources,
 		.dev = {
@@ -2078,11 +2207,7 @@ struct platform_device msm_device_smd = {
 
 static struct msm_watchdog_pdata msm_watchdog_pdata = {
 	.pet_time = 10000,
-#if 1 //watchdog time expand
-	.bark_time = 17000,
-#else
 	.bark_time = 11000,
-#endif
 	.has_secure = true,
 };
 

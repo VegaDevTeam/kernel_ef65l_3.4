@@ -21,7 +21,6 @@
 #include <linux/ktime.h>
 #include <linux/pm.h>
 #include <linux/pm_qos.h>
-#include <linux/proc_fs.h>
 #include <linux/smp.h>
 #include <linux/suspend.h>
 #include <linux/tick.h>
@@ -49,8 +48,19 @@
 #include "timer.h"
 #include "pm-boot.h"
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+#include <mach/pantech_debug.h> 
+#endif
+#endif
+
+// p15060
+#ifndef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#define CONFIG_PANTECH_ERR_CRASH_LOGGING
+#endif
 #ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-#include "sky_sys_reset.h"
+#include <linux/proc_fs.h>
+#include <mach/msm_smsm.h>
 #endif
 
 /******************************************************************************
@@ -74,6 +84,30 @@ module_param_named(
 	debug_mask, msm_pm_debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP
 );
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_121102
+static int debug_power_collaspe_status[4] = {0};
+#endif
+#endif
+
+typedef struct{
+  uint32_t chg_magic_num;
+  uint32_t chg_is_present;
+  uint32_t chg_is_factory;
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+// p15060
+// sync with
+//   - lk/target/msm8660_surf/init.c
+//   - msm/core/boot/secboot3/msm8660/sbl3/sky_sbl3/sys_api/chg_boot.c
+  bool silent_boot_mode;
+#endif
+  uint32_t chg_reserve;
+}SKY_CHG_SMEM_T;
+
+// p15060
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+typedef SKY_CHG_SMEM_T smem_id_vendor1_type;
+#endif
 
 /******************************************************************************
  * Sleep Modes and Parameters
@@ -472,6 +506,15 @@ static bool __ref msm_pm_spm_power_collapse(
 	vfp_pm_suspend();
 #endif
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_121102
+	if(pantech_debug_enable)
+	{
+		debug_power_collaspe_status[smp_processor_id()] = (from_idle<<8)|(notify_rpm<<4)|1;
+		pantechdbg_sched_msg("+pc(I:%d,R:%d)", from_idle, notify_rpm);
+	}
+#endif
+#endif
 	collapsed = msm_pm_l2x0_power_collapse();
 
 	msm_pm_boot_config_after_pc(cpu);
@@ -488,6 +531,15 @@ static bool __ref msm_pm_spm_power_collapse(
 		local_fiq_enable();
 	}
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_121102
+		if(pantech_debug_enable)
+		{
+			pantechdbg_sched_msg("-pc(%d)", collapsed);
+			debug_power_collaspe_status[smp_processor_id()] = 0;
+		}
+#endif
+#endif
 	if (MSM_PM_DEBUG_POWER_COLLAPSE & msm_pm_debug_mask)
 		pr_info("CPU%u: %s: msm_pm_collapse returned, collapsed %d\n",
 			cpu, __func__, collapsed);
@@ -977,6 +1029,54 @@ static struct platform_suspend_ops msm_pm_ops = {
 	.valid = suspend_valid_only_mem,
 };
 
+// p15060 (+)
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+static smem_id_vendor1_type *smem_id_vendor1_ptr = NULL;
+static uint32_t oem_prev_reset=0;
+
+static int oem_pm_read_proc_reset_info
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	int len = 0;
+
+    smem_id_vendor1_ptr = (smem_id_vendor1_type*)smem_alloc(SMEM_ID_VENDOR1,
+                                                                     sizeof(smem_id_vendor1_type));
+
+  len  = sprintf(page, "Factory Cable: 0x%x\n", smem_id_vendor1_ptr->chg_is_factory);
+  len += sprintf(page + len, "Present: %d\n", smem_id_vendor1_ptr->chg_is_present);
+  len += sprintf(page + len, "SilentBoot: %d\n", (smem_id_vendor1_ptr->silent_boot_mode ? 1 : 0 ) );
+
+  printk(KERN_INFO "Factory Cable: 0x%x\n", smem_id_vendor1_ptr->chg_is_factory);
+  printk(KERN_INFO "Present: %d\n", smem_id_vendor1_ptr->chg_is_present);
+  printk(KERN_INFO "SilentBoot: %d\n", (smem_id_vendor1_ptr->silent_boot_mode ? 1 : 0 ) );
+  
+  return len;
+}
+
+int oem_pm_write_proc_reset_info
+  (struct file *file, const char *buffer, unsigned long count, void *data)
+{
+	int len;
+	char tbuffer[2];
+
+	if(count > 1 )
+		len = 1;
+	
+	memset(tbuffer, 0x00, 2);
+
+	if(copy_from_user(tbuffer, buffer, len))
+		return -EFAULT;
+	
+	tbuffer[len] = '\0';
+
+	if(tbuffer[0] >= '0' && tbuffer[0] <= '9')
+		oem_prev_reset = tbuffer[0] - '0';
+
+	return len;
+}
+#endif
+// p15060 (-)
+
 /******************************************************************************
  * Initialization routine
  *****************************************************************************/
@@ -1005,10 +1105,11 @@ static int __init msm_pm_init(void)
 		MSM_PM_STAT_SUSPEND,
 	};
 	unsigned long exit_phys;
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-	struct proc_dir_entry *reset_info;
-#endif
 
+// p15060
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+  struct proc_dir_entry *oem_pm_power_on_info;
+#endif
 	/* Page table for cores to come back up safely. */
 	pc_pgd = pgd_alloc(&init_mm);
 	if (!pc_pgd)
@@ -1043,22 +1144,19 @@ static int __init msm_pm_init(void)
 	pmd[2] = __pmd(pmdval + (2 << (PGDIR_SHIFT - 1)));
 	flush_pmd_entry(pmd);
 	msm_pm_pc_pgd = virt_to_phys(pc_pgd);
-
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-	sky_sys_rst_set_prev_reset_info();
-	reset_info = create_proc_entry("pantech_resetinfo" , \
-				       S_IRUSR | S_IWUSR | \
-				       S_IRGRP | S_IWGRP, NULL);
-
-	if (reset_info) {
-	  reset_info->read_proc = sky_sys_rst_read_proc_reset_info;
-	  reset_info->write_proc = sky_sys_rst_write_proc_reset_info;
-	  reset_info->data = NULL;
-	}
-#endif 
 	clean_caches((unsigned long)&msm_pm_pc_pgd, sizeof(msm_pm_pc_pgd),
 		     virt_to_phys(&msm_pm_pc_pgd));
 
+// p15060
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+  oem_pm_power_on_info = create_proc_entry("pantech_resetinfo", S_IRUGO | S_IWUSR | S_IWGRP, NULL);
+
+	if (oem_pm_power_on_info) {
+		oem_pm_power_on_info->read_proc  = oem_pm_read_proc_reset_info;
+		oem_pm_power_on_info->write_proc = oem_pm_write_proc_reset_info;
+		oem_pm_power_on_info->data       = NULL;
+	}
+#endif
 	msm_pm_mode_sysfs_add();
 	msm_pm_add_stats(enable_stats, ARRAY_SIZE(enable_stats));
 

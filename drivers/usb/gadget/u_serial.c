@@ -30,6 +30,87 @@
 
 #include "u_serial.h"
 
+#if defined(CONFIG_PANTECH_PDL_DLOAD) && ( defined(CONFIG_PANTECH_EF33S_BOARD) || defined(CONFIG_PANTECH_EF34K_BOARD) || defined(CONFIG_PANTECH_EF34C_BOARD) || defined(CONFIG_PANTECH_EF35L_BOARD) )
+#include <linux/reboot.h>
+#include <linux/fs.h>
+#include <linux/file.h>
+#include <asm/uaccess.h>
+#include <linux/workqueue.h>
+
+//#include "sky_rawdata.h"
+#include "../../../../vendor/pantech/frameworks/sky_rawdata/sky_rawdata.h"
+
+enum {
+  DLOADINFO_NONE_STATE = 0,
+  DLOADINFO_AT_RESPONSE_STATE,
+  DLOADINFO_PHONE_INFO_STATE,
+  DLOADINFO_HASH_TABLE_STATE,
+  DLOADINFO_PARTI_TABLE_STATE,
+  DLOADINFO_FINISH_STATE,
+  DLOADINFO_MAX_STATE
+};
+
+enum {
+  FINISH_CMD = 0,
+  PHONE_INFO_CMD,
+  HASH_TABLE_CMD,
+  PARTI_TABLE_CMD,
+  MAX_PHONEINFO_CMD
+};
+
+typedef struct {
+  unsigned int partition_size_;
+  char   partition_name_[ 8 ];
+}partition_info_type;
+
+typedef  unsigned long int  uint32;      /* Unsigned 32 bit value */
+typedef  unsigned char      uint8;       /* Unsigned 8  bit value */
+typedef struct {
+  uint32 version_;
+  char   model_name_    [ 16 ];
+  char   binary_version_[ 16 ];
+  uint32 fs_version_;
+  uint32 nv_version_;
+  char   build_date_    [ 16 ];
+  char   build_time_    [ 16 ];
+
+
+  uint32 boot_loader_version_;                 
+  uint32 boot_section_id_[4];                 
+
+
+  uint32              efs_size_;                
+  uint32              partition_num_;           
+  partition_info_type partition_info_[ 6 ];     
+
+  uint32 fusion_id_;
+  uint8  imei_[ 15 ];
+
+  uint8  reserved_[ 61 ];
+} phoneinfo_type;
+
+
+
+static struct delayed_work phoneinfo_read_wqst;
+static char pantech_phoneinfo_buff[SECTOR_SIZE]={0,};
+static char temp_buf[SECTOR_SIZE]={0,};
+#define NV_UE_IMEI_SIZE             9
+#define IMEI_ADDR_MAGIC_NUM         0x88776655
+
+typedef struct
+{
+  uint32 imei_magic_num;
+  uint8 backup_imei[NV_UE_IMEI_SIZE];
+  uint8 emptspace[51];
+} imei_backup_info_type;
+
+
+static void load_phoneinfo_with_imei(struct work_struct *work_s);
+static unsigned fill_writereq(int *dloadinfo_state, struct usb_request *writereq);
+static unsigned int fill_phoneinfo(char *buff);
+static unsigned int check_phoneinfo(void);
+static int dloadinfo_state = DLOADINFO_NONE_STATE;
+#endif
 
 /*
  * This component encapsulates the TTY layer glue needed to provide basic
@@ -152,6 +233,176 @@ static struct workqueue_struct *gserial_wq;
 #else
 #define pr_vdebug(fmt, arg...) \
 	({ if (0) pr_debug(fmt, ##arg); })
+#endif
+
+#if defined(CONFIG_PANTECH_PDL_DLOAD) && ( defined(CONFIG_PANTECH_EF33S_BOARD) || defined(CONFIG_PANTECH_EF34K_BOARD) || defined(CONFIG_PANTECH_EF34C_BOARD) || defined(CONFIG_PANTECH_EF35L_BOARD) )
+
+static unsigned int fill_phoneinfo(char *buff)
+{
+  phoneinfo_type *pantech_phoneinfo_buff_ptr;
+  pantech_phoneinfo_buff_ptr = (phoneinfo_type *)&pantech_phoneinfo_buff[16];
+  if(pantech_phoneinfo_buff_ptr->version_== 0)
+  {
+    printk(KERN_ERR "%s: phoneinfo is broken or empty\n", __func__);
+    return 0;
+  }
+  memcpy(buff, pantech_phoneinfo_buff, 16 + sizeof(phoneinfo_type));
+  printk(KERN_INFO "%s: phoneinfo is OK\n", __func__);
+  return (16 + sizeof(phoneinfo_type));
+}
+static unsigned int check_phoneinfo(void)
+{
+  phoneinfo_type *pantech_phoneinfo_buff_ptr;
+  pantech_phoneinfo_buff_ptr = (phoneinfo_type *)&pantech_phoneinfo_buff[16];
+   printk(KERN_INFO "%s: phoneinfo is OK\n", __func__);
+  if(pantech_phoneinfo_buff_ptr->version_== 0)
+
+  {
+    printk(KERN_ERR "%s: phoneinfo is broken or empty\n", __func__);
+    return 0;
+  }
+
+  printk(KERN_INFO "%s: phoneinfo is OK\n", __func__);
+  return 1;
+}
+
+static void load_phoneinfo_with_imei(struct work_struct *work_s)
+{
+  struct file *rawdata_filp;
+  char read_buf[SECTOR_SIZE];
+  mm_segment_t oldfs;
+  int rc;
+  imei_backup_info_type *imei_backup_info_buf;
+  phoneinfo_type *pantech_phoneinfo_buff_ptr;
+  static int read_count = 0;
+
+
+  printk(KERN_INFO "%s: read phone info start\n", __func__);
+
+  memset( pantech_phoneinfo_buff, 0x0, SECTOR_SIZE );
+
+  pantech_phoneinfo_buff[0] = 1;
+  pantech_phoneinfo_buff[9] = 1;
+  pantech_phoneinfo_buff_ptr = (phoneinfo_type *)&pantech_phoneinfo_buff[16];
+
+  oldfs = get_fs();
+  set_fs(KERNEL_DS);
+  rawdata_filp = filp_open("/dev/block/mmcblk0p10", O_RDONLY | O_SYNC, 0);
+  if( IS_ERR(rawdata_filp) )
+  {
+    set_fs(oldfs);
+    printk(KERN_ERR "%s: filp_open error\n",__func__);
+		return;
+  }
+  set_fs(oldfs);
+  printk(KERN_INFO "%s: file open OK\n", __func__);
+
+  rawdata_filp->f_pos = 0;
+  memset( read_buf, 0x0, SECTOR_SIZE );
+	if(((rawdata_filp->f_flags & O_ACCMODE) & O_RDONLY) != 0)
+  {
+    printk(KERN_ERR "%s: read permission denied\n",__func__);
+    return;
+	}
+  oldfs = get_fs();
+  set_fs(KERNEL_DS);
+  rc = rawdata_filp->f_op->read(rawdata_filp, read_buf, SECTOR_SIZE, &rawdata_filp->f_pos);
+  if (rc < 0)
+  {
+    set_fs(oldfs);
+    printk(KERN_ERR "%s: read phoneinfo error = %d \n",__func__,rc);
+    filp_close(rawdata_filp, NULL);
+		return;
+  }
+  set_fs(oldfs);
+  memcpy(pantech_phoneinfo_buff_ptr, &read_buf[32], sizeof(phoneinfo_type));
+  printk(KERN_INFO "%s: read Phoneinfo OK\n", __func__);
+
+#if 1
+  rawdata_filp->f_pos = NON_SECURE_IMEI_START;
+  memset( read_buf, 0x0, SECTOR_SIZE );
+  printk(KERN_ERR "%s: rawdata_filp->f_pos = %x \n",__func__,NON_SECURE_IMEI_START);
+
+  // read
+	if(((rawdata_filp->f_flags & O_ACCMODE) & O_RDONLY) != 0)
+  {
+    printk(KERN_ERR "%s: read permission denied\n",__func__);
+    return;
+	}
+  oldfs = get_fs();
+  set_fs(KERNEL_DS);
+  rc = rawdata_filp->f_op->read(rawdata_filp, read_buf, 16, &rawdata_filp->f_pos);
+  if (rc < 0) {
+    set_fs(oldfs);
+    printk(KERN_ERR "%s: read imei error = %d \n",__func__,rc);
+    filp_close(rawdata_filp, NULL);
+		return;
+  }
+  set_fs(oldfs);
+
+  #if 0 //test
+    printk(KERN_ERR "%s : imei <%x> %x %x %x %x , %x %x %x %x, %x %x %x %x, %x %x %x \n",__func__,0,read_buf[0],read_buf[1],read_buf[2],read_buf[3],read_buf[4],read_buf[5],read_buf[6],read_buf[7],read_buf[8],read_buf[9],read_buf[10],read_buf[11],read_buf[12],read_buf[13],read_buf[14]);
+  #endif
+
+  printk(KERN_INFO "%s: read IMEI OK\n", __func__);
+
+  imei_backup_info_buf = (imei_backup_info_type *)&read_buf[0];
+  if(imei_backup_info_buf->imei_magic_num & IMEI_ADDR_MAGIC_NUM) 
+  {
+    memcpy(pantech_phoneinfo_buff_ptr->imei_, read_buf+4, NV_UE_IMEI_SIZE);
+  }
+#endif
+  filp_close(rawdata_filp, NULL);
+  if(check_phoneinfo() != 1 && read_count < 5)
+  {
+    schedule_delayed_work(&phoneinfo_read_wqst, HZ*10);
+    read_count++;
+  }
+
+  printk(KERN_INFO "%s: read phone info end : read_count = %d\n", __func__, read_count);
+  return;
+
+}
+unsigned fill_writereq(int *dloadinfo_state, struct usb_request *writereq)
+{
+  unsigned len = TX_BUF_SIZE;
+  switch( *dloadinfo_state )
+  {
+    case DLOADINFO_AT_RESPONSE_STATE:
+    {
+      memcpy(writereq->buf, "AT*PHONEINFO*WAIT", sizeof("AT*PHONEINFO*WAIT")-1);
+      writereq->length = sizeof("AT*PHONEINFO*WAIT")-1;
+      len = writereq->length;
+      printk(KERN_ERR "%s: AT*PHONEINFO*WAIT", __func__);
+    }
+    break;
+    case DLOADINFO_PHONE_INFO_STATE:
+    {
+      printk(KERN_ERR "%s: case DLOADINFO_PHONE_INFO_STATE", __func__);
+      memset( writereq->buf, 0x0, 16 + sizeof(phoneinfo_type) );
+      len = writereq->length = fill_phoneinfo((char *)writereq->buf);
+      #if 0 //test
+        for( i=3; i < len/16; i++ )
+        {
+          printk(KERN_ERR "%s : phoneinfo <%x> %x %x %x %x, %x %x %x %x, %x %x %x %x, %x %x %x %x\n",__func__,i*16,tx_buf[i*16],tx_buf[i*16+1],tx_buf[i*16+2],tx_buf[i*16+3],tx_buf[i*16+4],tx_buf[i*16+5],tx_buf[i*16+6],tx_buf[i*16+7],tx_buf[i*16+8],tx_buf[i*16+9],tx_buf[i*16+10],tx_buf[i*16+11],tx_buf[i*16+12],tx_buf[i*16+13],tx_buf[i*16+14],tx_buf[i*16+15]);
+        }
+      #endif
+      printk(KERN_ERR "%s: packet make DLOADINFO_PHONE_INFO_STATE", __func__);
+    }
+    break;
+    case DLOADINFO_FINISH_STATE:
+    {
+      printk(KERN_ERR "%s: case DLOADINFO_FINISH_STATE", __func__);
+      memset( writereq->buf, 0x0, 16 );
+      writereq->length = 16;
+      len = writereq->length;
+      *dloadinfo_state = DLOADINFO_NONE_STATE;
+      printk(KERN_ERR "%s: set DLOADINFO_NONE_STATE", __func__);
+    }
+    break;
+  }
+  return len;
+}
 #endif
 
 /*-------------------------------------------------------------------------*/
@@ -531,6 +782,11 @@ static void gs_rx_push(struct work_struct *w)
 	bool			disconnect = false;
 	bool			do_push = false;
 
+#if  defined(CONFIG_PANTECH_PDL_DLOAD) && ( defined(CONFIG_PANTECH_EF33S_BOARD) || defined(CONFIG_PANTECH_EF34K_BOARD) || defined(CONFIG_PANTECH_EF34C_BOARD) || defined(CONFIG_PANTECH_EF35L_BOARD) )
+//	struct list_head *pool_write = &port->write_pool;
+//	static int dloadinfo_state = DLOADINFO_NONE_STATE;
+	const unsigned short DLOADINFO_PACKET_VERSION = 0;
+#endif
 	/* hand any queued data to the tty */
 	spin_lock_irq(&port->port_lock);
 	tty = port->port_tty;
@@ -562,7 +818,79 @@ static void gs_rx_push(struct work_struct *w)
 			/* normal completion */
 			break;
 		}
+#if defined(CONFIG_PANTECH_PDL_DLOAD) && ( defined(CONFIG_PANTECH_EF33S_BOARD) || defined(CONFIG_PANTECH_EF34K_BOARD) || defined(CONFIG_PANTECH_EF34C_BOARD) || defined(CONFIG_PANTECH_EF35L_BOARD) )
 
+	if(check_phoneinfo() == 1)
+	{
+	  if( memcmp( req->buf, "AT*PHONEINFO*RESET", sizeof("AT*PHONEINFO*RESET")-1) == 0 )
+	  {
+	    printk(KERN_ERR "%s: PDL IDLE DLOAD REBOOT", __func__);
+	   // kernel_restart("oem-33");
+	   machine_restart("oem-33");
+	    return;
+	  }
+	  else if(memcmp( req->buf, "AT*PHONEINFO", sizeof("AT*PHONEINFO")-1) == 0 )
+	  {
+	    printk(KERN_ERR "%s: go DLOADINFO_AT_RESPONSE_STATE", __func__);
+	    dloadinfo_state = DLOADINFO_AT_RESPONSE_STATE;
+	  }
+	  else if( dloadinfo_state == DLOADINFO_AT_RESPONSE_STATE || dloadinfo_state == DLOADINFO_PHONE_INFO_STATE )
+	  {
+	    printk(KERN_ERR "%s: if %d", __func__, dloadinfo_state);
+	    if( *(unsigned int *)(req->buf) == (PHONE_INFO_CMD|(DLOADINFO_PACKET_VERSION<<16)) )
+	    {
+	      dloadinfo_state = DLOADINFO_PHONE_INFO_STATE;
+	      printk(KERN_ERR "%s: go DLOADINFO_PHONE_INFO_STATE", __func__);
+	    }
+	    if( *(unsigned int *)(req->buf) == (FINISH_CMD|(DLOADINFO_PACKET_VERSION<<16)) )
+	    {
+	      dloadinfo_state = DLOADINFO_FINISH_STATE;
+	      printk(KERN_ERR "%s: go DLOADINFO_FINISH_STATE", __func__);
+	    }
+	  }
+
+	if( dloadinfo_state != DLOADINFO_NONE_STATE )
+	{
+		int pdl_ret=-1;
+		struct usb_request *pdl_req=NULL;
+
+		struct usb_ep	*ep_in=port->port_usb ? port->port_usb->in : NULL;		
+
+		if (ep_in == NULL)	
+			break;
+
+
+
+		pdl_req=usb_ep_alloc_request(ep_in, GFP_ATOMIC);
+		
+		if(pdl_req!=NULL)
+		{
+			printk(KERN_ERR "%s: run cmd send_dload_packet download state %d", __func__, dloadinfo_state);
+			pdl_req->buf = temp_buf;
+			pdl_req->length = fill_writereq(&dloadinfo_state, pdl_req);
+
+		//	spin_unlock_irqrestore(&port->port_lock, flags);
+			if(ep_in->ops && ep_in->ops->queue)
+				pdl_ret = usb_ep_queue(ep_in, pdl_req, GFP_ATOMIC);
+		//	spin_lock_irqsave(&port->port_lock, flags);
+
+			if (!port->port_usb) {
+				gs_free_req(ep_in, pdl_req);
+				break;
+			}
+			if (pdl_ret) {
+				pr_debug("%s: %s %s err %d\n",
+					__func__, "queue", ep_in->name, pdl_ret);
+
+				break;
+			}
+			
+			goto recycle;
+		}
+
+	}
+    }
+#endif
 		/* push data to (open) tty */
 		if (req->actual) {
 			char		*packet = req->buf;
@@ -619,7 +947,7 @@ recycle:
 					port->port_num);
 		}
 	}
-
+	
 	/* If we're still connected, refill the USB RX queue. */
 	if (!disconnect && port->port_usb)
 		gs_start_rx(port);
@@ -1357,7 +1685,10 @@ int gserial_setup(struct usb_gadget *g, unsigned count)
 	coding.bCharFormat = 8;
 	coding.bParityType = USB_CDC_NO_PARITY;
 	coding.bDataBits = USB_CDC_1_STOP_BITS;
-
+#if defined(CONFIG_PANTECH_PDL_DLOAD) && ( defined(CONFIG_PANTECH_EF33S_BOARD) || defined(CONFIG_PANTECH_EF34K_BOARD) || defined(CONFIG_PANTECH_EF34C_BOARD) || defined(CONFIG_PANTECH_EF35L_BOARD) )
+ 	INIT_DELAYED_WORK(&phoneinfo_read_wqst, load_phoneinfo_with_imei);
+	schedule_delayed_work(&phoneinfo_read_wqst, HZ*10);
+#endif
 	tty_set_operations(gs_tty_driver, &gs_tty_ops);
 
 	gserial_wq = create_singlethread_workqueue("k_gserial");

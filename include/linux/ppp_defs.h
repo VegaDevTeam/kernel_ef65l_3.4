@@ -19,10 +19,6 @@
 #define PPP_FCSLEN	2	/* octets for FCS */
 #define PPP_MRU		1500	/* default MRU = max length of info field */
 
-#if 1//def FEATURE_LGT_DS_VPN_FIX : ifdef doesn't working
-#define PPP_MTU 1500
-#endif /* FEATURE_LGT_DS_VPN_FIX */
-
 #define PPP_ADDRESS(p)	(((__u8 *)(p))[0])
 #define PPP_CONTROL(p)	(((__u8 *)(p))[1])
 #define PPP_PROTOCOL(p)	((((__u8 *)(p))[2] << 8) + ((__u8 *)(p))[3])

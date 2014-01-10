@@ -1206,7 +1206,11 @@ static int diagchar_cleanup(void)
 #ifdef CONFIG_DIAG_SDIO_PIPE
 void diag_sdio_fn(int type)
 {
-	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()) {
+	if (machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa()
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF65L)
+		|| machine_is_msm8x60_ef39s() || machine_is_msm8x60_ef40s() || machine_is_msm8x60_ef40k() || machine_is_msm8x60_ef65l()
+#endif
+	) {
 		if (type == INIT)
 			diagfwd_sdio_init();
 		else if (type == EXIT)

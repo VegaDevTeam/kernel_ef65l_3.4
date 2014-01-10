@@ -1255,7 +1255,7 @@ static int vfe31_proc_general(
 	uint32_t snapshot_cnt = 0;
 	uint32_t temp1 = 0, temp2 = 0;
 
-	CDBG("vfe31_proc_general: cmdID = %s, length = %d\n",
+	CDBG("msm_vfe31_v4l2.c/ vfe31_proc_general: cmdID = %s, length = %d\n",
 		vfe31_general_cmd[cmd->id], cmd->length);
 	switch (cmd->id) {
 	case VFE_CMD_RESET:

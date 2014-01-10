@@ -74,7 +74,7 @@
 #define SPS_MIN_XFER_SIZE		MCI_FIFOSIZE
 
 #define MSM_MMC_BUS_VOTING_DELAY	200 /* msecs */
-#define CONFIG_PANTECH_WIFI_MMC
+
 #if defined(CONFIG_DEBUG_FS)
 static void msmsdcc_dbg_createhost(struct msmsdcc_host *);
 static struct dentry *debugfs_dir;
@@ -1760,7 +1760,19 @@ msmsdcc_irq(int irq, void *dev_id)
 				 * This is a wakeup interrupt so hold wakelock
 				 * until SDCC resume is handled.
 				 */
+			#if defined (CONFIG_SKY_WLAN_BCM4330) 	
+			{
+				if(strcmp(mmc_hostname(host->mmc),"mmc3"))
+					wake_lock(&host->sdio_wlock);
+			}
+			#elif defined (CONFIG_SKY_WLAN_BCM4329)
+			{
+				if(strcmp(mmc_hostname(host->mmc),"mmc2"))
+					wake_lock(&host->sdio_wlock);			
+			}
+			#else
 				wake_lock(&host->sdio_wlock);
+			#endif
 			} else {
 				spin_unlock(&host->lock);
 				mmc_signal_sdio_irq(host->mmc);
@@ -2722,7 +2734,8 @@ static int msmsdcc_cfg_mpm_sdiowakeup(struct msmsdcc_host *host,
 
 	return ret;
 }
-#ifdef CONFIG_SKY_MMC
+
+#ifdef FEATURE_PANTECH_MMC
 extern unsigned int msm8x60_sdcc_slot_status(void);
 #endif
 static u32 msmsdcc_setup_pwr(struct msmsdcc_host *host, struct mmc_ios *ios)
@@ -2730,11 +2743,11 @@ static u32 msmsdcc_setup_pwr(struct msmsdcc_host *host, struct mmc_ios *ios)
 	u32 pwr = 0;
 	int ret = 0;
 	struct mmc_host *mmc = host->mmc;
-#ifdef CONFIG_SKY_MMC
+#ifdef FEATURE_PANTECH_MMC
 	unsigned int slot_status;
 #endif
-
-#ifdef CONFIG_SKY_MMC
+	
+#ifdef FEATURE_PANTECH_MMC
 	if(host->plat->translate_vdd && !host->sdio_gpio_lpm){
 		if(host->pdev_id == 3 && ios->power_mode == MMC_POWER_OFF){
 			slot_status = msm8x60_sdcc_slot_status();
@@ -2753,7 +2766,7 @@ static u32 msmsdcc_setup_pwr(struct msmsdcc_host *host, struct mmc_ios *ios)
 #else
 	if (host->plat->translate_vdd && !host->sdio_gpio_lpm)
 		ret = host->plat->translate_vdd(mmc_dev(mmc), ios->vdd);
-#endif		
+#endif	
 	else if (!host->plat->translate_vdd && !host->sdio_gpio_lpm)
 		ret = msmsdcc_setup_vreg(host, !!ios->vdd, false);
 
@@ -4105,8 +4118,23 @@ static irqreturn_t
 msmsdcc_platform_sdiowakeup_irq(int irq, void *dev_id)
 {
 	struct msmsdcc_host	*host = dev_id;
-
+#if 0 //LS4-SHPARK-SYSTEN : Blocked by Qualcomm workaround code for case#01246588
+//+	Fixed Non-Sleep. Because of SDIO_IRQ. by dscheon	
+	int ret = 0;
 	pr_debug("%s: SDIO Wake up IRQ : %d\n", mmc_hostname(host->mmc), irq);
+
+	if (host->gpio_status_flag)
+	{
+		ret = irq_set_irq_type(host->plat->sdiowakeup_irq, IRQF_SHARED | IRQF_TRIGGER_LOW);
+		if (ret)
+			pr_info("%s: irq_set_irq_type: %d\n", mmc_hostname(host->mmc), ret);
+
+		host->gpio_status_flag = 0;
+	}
+//-	Fixed Non-Sleep. Because of SDIO_IRQ. by dscheon		
+#endif
+	pr_debug("%s: SDIO Wake up IRQ : %d\n", mmc_hostname(host->mmc), irq);
+
 	spin_lock(&host->lock);
 	if (!host->sdio_wakeupirq_disabled) {
 		disable_irq_nosync(irq);
@@ -4116,6 +4144,18 @@ msmsdcc_platform_sdiowakeup_irq(int irq, void *dev_id)
 		}
 		host->sdio_wakeupirq_disabled = 1;
 	}
+//LS4-SHPARK-SYSTEN : Qualcomm workaround code for case#01246588
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF65L)
+	if (host->gpio_status_flag) {
+		if (host->plat->is_sdio_al_client && host->mmc->sdio_irq_thread) {
+			wake_lock(&host->sdio_wlock);
+			spin_unlock(&host->lock);
+			mmc_signal_sdio_irq(host->mmc);
+			goto out_unlocked;
+		}
+	}
+    else
+#endif
 	if (host->plat->is_sdio_al_client) {
 		wake_lock(&host->sdio_wlock);
 		spin_unlock(&host->lock);
@@ -5405,6 +5445,25 @@ msmsdcc_probe(struct platform_device *pdev)
 	if (plat->sdiowakeup_irq) {
 		wake_lock_init(&host->sdio_wlock, WAKE_LOCK_SUSPEND,
 				mmc_hostname(mmc));
+//LS4-SHPARK-SYSTEN : Qualcomm workaround code for case#01246588
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40K) || defined(CONFIG_MACH_MSM8X60_EF40S) || defined(CONFIG_MACH_MSM8X60_EF65L)
+		if(((memcmp(mmc_hostname(mmc), "mmc1", 4) == 0) && (gpio_get_value(144) == 0)) 
+            || ((memcmp(mmc_hostname(mmc), "mmc4", 4) == 0) && (gpio_get_value(99) == 0))) {
+		  pr_info("-----%s: %s GPIO is low, sdiowakeup_irq=0x%x\n", __func__, mmc_hostname(mmc), plat->sdiowakeup_irq);
+		  host->gpio_status_flag = 1;
+#if 0 //LS4-SHPARK-SYSTEN : Blocked by Qualcomm workaround code for case#01246588
+		  //	Fixed Non-Sleep. Because of SDIO_IRQ. by dscheon	
+		  host->gpio_status_flag = 1;
+		  ret = request_irq(plat->sdiowakeup_irq,
+		  msmsdcc_platform_sdiowakeup_irq,
+		  IRQF_SHARED | IRQF_TRIGGER_HIGH,	//	Fixed Non-Sleep. Because of SDIO_IRQ. by dscheon	
+		  DRIVER_NAME "sdiowakeup", host);
+#endif
+		}
+		else {
+		  host->gpio_status_flag = 0;
+		}
+#endif
 		ret = request_irq(plat->sdiowakeup_irq,
 			msmsdcc_platform_sdiowakeup_irq,
 			IRQF_SHARED | IRQF_TRIGGER_LOW,
@@ -5456,12 +5515,19 @@ msmsdcc_probe(struct platform_device *pdev)
 		}
 	} else if (plat->register_status_notify) {
 		plat->register_status_notify(msmsdcc_status_notify_cb, host);
+#ifdef CONFIG_SKY_WLAN_BCM4329
+		if(!strcmp(mmc_hostname(mmc),"mmc2"))
+		{
+			mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
+		}
+#endif //CONFIG_SKY_WLAN
+
 #ifdef CONFIG_SKY_WLAN_MMC
 		if(!strcmp(mmc_hostname(mmc),"mmc3"))
 		{
 			mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
 		}
-#elif defined (CONFIG_PANTECH_WIFI_MMC)	
+#elif defined (CONFIG_SKY_WLAN_BCM4330)	
 		//mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;	
 		if(!strcmp(mmc_hostname(mmc),"mmc3"))
 		{

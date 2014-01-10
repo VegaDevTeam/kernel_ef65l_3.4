@@ -40,8 +40,14 @@
 #include "msm_watchdog.h"
 #include "devices.h"
 #include "clock.h"
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-#include <mach/system.h>
+
+#ifdef CONFIG_PANTECH_RESET_REASON
+#include "sky_sys_reset.h"
+#endif
+
+#ifdef CONFIG_PANTECH_EF65L_BOARD
+#define PANTECH_MDMDUMP_MAGIC         0xFF93560C
+static int is_reset_and_mdm_ramdump_on = 0;
 #endif
 
 #define CHARM_MODEM_TIMEOUT	6000
@@ -60,10 +66,14 @@ static int charm_boot_status;
 static int charm_ram_dump_status;
 static struct workqueue_struct *charm_queue;
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#define CHARM_DBG(...)  do { pr_info(__VA_ARGS__); \
+            } while (0);
+#else
 #define CHARM_DBG(...)	do { if (charm_debug_on) \
 					pr_info(__VA_ARGS__); \
 			} while (0);
-
+#endif
 
 DECLARE_COMPLETION(charm_needs_reload);
 DECLARE_COMPLETION(charm_boot);
@@ -122,8 +132,7 @@ static int charm_panic_prep(struct notifier_block *this,
 
 	CHARM_DBG("%s: setting AP2MDM_ERRFATAL high for a non graceful reset\n",
 			 __func__);
-
-#if 0 //P10911 block for mdm restart fail  //CONFIG_PANTECH_ERR_CRASH_LOGGING
+#ifndef CONFIG_PANTECH
 	if (get_restart_level() == RESET_SOC)
 		pm8xxx_stay_on();
 #endif
@@ -241,12 +250,10 @@ struct miscdevice charm_modem_misc = {
 static void charm_status_fn(struct work_struct *work)
 {
 	pr_info("Reseting the charm because status changed\n");
-	
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-	arch_reset(0, 0);
-#else
-	subsystem_restart("external_modem");
+#ifdef CONFIG_PANTECH_RESET_REASON
+	sky_sys_rst_set_reboot_info(SYS_RESET_REASON_MDM);
 #endif
+	subsystem_restart("external_modem");
 }
 
 static DECLARE_WORK(charm_status_work, charm_status_fn);
@@ -254,9 +261,12 @@ static DECLARE_WORK(charm_status_work, charm_status_fn);
 static void charm_fatal_fn(struct work_struct *work)
 {
 	pr_info("Reseting the charm due to an errfatal\n");
-#if 0 //P10911 block for mdm restart fail  //CONFIG_PANTECH_ERR_CRASH_LOGGING
+#ifndef CONFIG_PANTECH
 	if (get_restart_level() == RESET_SOC)
 		pm8xxx_stay_on();
+#endif
+#ifdef CONFIG_PANTECH_RESET_REASON
+	sky_sys_rst_set_reboot_info(SYS_RESET_REASON_MDM);
 #endif
 	subsystem_restart("external_modem");
 }
@@ -334,6 +344,36 @@ static struct notifier_block gsbi9_nb = {
 	.notifier_call = gsbi9_uart_notifier_cb,
 };
 
+#ifdef CONFIG_PANTECH_EF65L_BOARD
+static void check_reset_and_mdm_ramdump_on(void)
+{
+    void *mdmdump_check_addr = NULL;
+    unsigned int mdmdump_mode = 0;
+
+	is_reset_and_mdm_ramdump_on = 0;
+
+    mdmdump_check_addr = PANTECH_RESTART_REASON_ADDR+0x8;
+    mdmdump_mode = __raw_readl(mdmdump_check_addr);
+
+    printk(KERN_INFO "sky_prev_reset_reason : 0x%08X\n", sky_prev_reset_reason);
+    printk(KERN_INFO "mdmdump_mode : 0x%08X\n", mdmdump_mode);
+
+    if(mdmdump_mode == PANTECH_MDMDUMP_MAGIC)
+    {
+		switch (sky_prev_reset_reason)
+		{
+		case SYS_RESET_REASON_AMSS:
+		case SYS_RESET_REASON_LINUX:
+		case SYS_RESET_REASON_MDM:
+			is_reset_and_mdm_ramdump_on = 1;
+			break;
+		}
+	}
+
+	printk("is_reset_and_mdm_ramdump_on : %d\n", is_reset_and_mdm_ramdump_on);
+}
+#endif
+
 static int __init charm_modem_probe(struct platform_device *pdev)
 {
 	int ret, irq;
@@ -358,9 +398,15 @@ static int __init charm_modem_probe(struct platform_device *pdev)
 	gpio_direction_input(MDM2AP_ERRFATAL);
 
 #ifdef CONFIG_MACH_MSM8X60_EF65L
-	gpio_direction_output(AP2MDM_PMIC_RESET_N, 1);
-	msleep(4000);
-	gpio_direction_output(AP2MDM_PMIC_RESET_N, 0);
+	check_reset_and_mdm_ramdump_on();
+	if(is_reset_and_mdm_ramdump_on == 1){
+        gpio_direction_output(AP2MDM_PMIC_RESET_N, 1);
+		msleep(50); //for saving mdm ramdump, only mdmdump momde enable.
+        gpio_direction_output(AP2MDM_PMIC_RESET_N, 0);
+	}else{
+        gpio_direction_output(AP2MDM_PMIC_RESET_N, 1);
+		//AP2MDM_PMIC_RESET_N -> 0 is setting on charm_ap2mdm_kpdpwr_on fn.
+	}
 #endif
 
 	power_on_charm = d->charm_modem_on;
@@ -471,10 +517,7 @@ static void charm_modem_shutdown(struct platform_device *pdev)
 			break;
 	}
 
-  #ifndef CONFIG_MACH_MSM8X60_EF65L
-	if (i <= 0)
-  #endif
-	{
+	if (i <= 0) {
 		pr_err("%s: MDM2AP_STATUS never went low.\n",
 			 __func__);
 		gpio_direction_output(AP2MDM_PMIC_RESET_N, 1);

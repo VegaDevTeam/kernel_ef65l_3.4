@@ -140,6 +140,38 @@ struct msm_sensor_fn_t {
 		(struct msm_sensor_ctrl_t *s_ctrl, uint16_t res);
 	int32_t (*sensor_get_csi_params)(struct msm_sensor_ctrl_t *,
 		struct csi_lane_params_t *);
+
+#ifdef CONFIG_PANTECH_CAMERA_TUNER
+    int (*sensor_set_tuner) (struct tuner_cfg);
+#endif
+#ifdef CONFIG_PANTECH_CAMERA
+    int (*sensor_set_brightness) (struct msm_sensor_ctrl_t *, int8_t); // brightness);
+    int (*sensor_set_effect) (struct msm_sensor_ctrl_t *, int8_t); // effect);
+    int (*sensor_set_exposure_mode) (struct msm_sensor_ctrl_t *, int8_t); // exposure);
+    int (*sensor_set_wb) (struct msm_sensor_ctrl_t *, int8_t); // wb);
+    int (*sensor_set_preview_fps) (struct msm_sensor_ctrl_t *, int8_t); // preview_fps);     
+    int (*sensor_set_auto_focus) (struct msm_sensor_ctrl_t *, int8_t);
+    int (*sensor_set_scene_mode) (struct msm_sensor_ctrl_t *, int8_t); 
+    int (*sensor_set_reflect) (struct msm_sensor_ctrl_t *, int8_t); // reflect);     
+    int (*sensor_set_antibanding) (struct msm_sensor_ctrl_t *, int8_t);
+    int (*sensor_set_antishake) (struct msm_sensor_ctrl_t *, int8_t);
+    int (*sensor_set_led_mode) (struct msm_sensor_ctrl_t *, int8_t);
+    int (*sensor_check_af) (struct msm_sensor_ctrl_t *, int8_t, int32_t *); //p11634_add_af_check_130715
+    int (*sensor_set_coninuous_af) (struct msm_sensor_ctrl_t *, int8_t);
+    int (*sensor_set_focus_rect) (struct msm_sensor_ctrl_t *, int32_t);
+    int (*sensor_set_hdr) (struct msm_sensor_ctrl_t *);
+    int (*sensor_set_metering_area) (struct msm_sensor_ctrl_t *, int32_t);
+    int (*sensor_get_eeprom_data) (struct msm_sensor_ctrl_t *, struct sensor_cfg_data *);//void *);//eeprom
+    int (*sensor_set_iso) (struct msm_sensor_ctrl_t *, int32_t);    
+
+    int (*sensor_set_wdr) (struct msm_sensor_ctrl_t *, int8_t);
+    int (*sensor_lens_stability) (struct msm_sensor_ctrl_t *);
+#if 1 //def F_PANTECH_CAMERA_FIX_CFG_AE_AWB_LOCK
+    int (*sensor_set_aec_lock) (struct msm_sensor_ctrl_t *, int8_t);
+    int (*sensor_set_awb_lock) (struct msm_sensor_ctrl_t *, int8_t);
+#endif
+
+#endif
 };
 
 struct msm_sensor_csi_info {

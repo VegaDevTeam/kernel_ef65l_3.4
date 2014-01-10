@@ -27,18 +27,18 @@
 #include <linux/ion.h>
 #include <mach/iommu_domains.h>
 
-#ifdef CONFIG_MSM_CAMERA_WAKELOCK
-#include <linux/wakelock.h> 
-#endif
-
-#define CONFIG_MSM_CAMERA_DEBUG
-#define F_PANTECH_CAMERA_LOG_PRINTK
+//#undef F_PANTECH_CAMERA_LOG_PRINTK
+//#ifdef CONFIG_PANTECH_CAMERA
+//#define F_PANTECH_CAMERA_LOG_PRINTK
+//#endif
+//#define CONFIG_MSM_CAMERA_DEBUG
 #ifdef CONFIG_MSM_CAMERA_DEBUG
-#define CDBG(fmt, args...) pr_debug(fmt, ##args)
+#define CDBG(fmt, args...)  printk(KERN_INFO "msm_camera: " fmt, ##args)//pr_debug(fmt, ##args)
 #else
 #define CDBG(fmt, args...) do { } while (0)
 #endif
-#ifdef F_PANTECH_CAMERA_LOG_PRINTK
+
+#if 1//def F_PANTECH_CAMERA_LOG_PRINTK
 #define SKYCDBG(fmt, args...) printk(KERN_INFO "SKYCDBG: " fmt, ##args)
 #define SKYCERR(fmt, args...) printk(KERN_ERR "SKYCERR: " fmt, ##args)
 #else
@@ -287,9 +287,6 @@ struct msm_sensor_ctrl {
 	int (*s_init)(const struct msm_camera_sensor_info *);
 	int (*s_release)(void);
 	int (*s_config)(void __user *);
-#ifdef CONFIG_PANTECH_CAMERA//IRQ
-	uint32_t (*s_readirq)(void);
-#endif
 	enum msm_camera_type s_camera_type;
 	uint32_t s_mount_angle;
 	enum msm_st_frame_packing s_video_packing;
@@ -368,13 +365,6 @@ struct msm_sync {
 	struct msm_sensor_ctrl sctrl;
 	struct msm_strobe_flash_ctrl sfctrl;
 	struct pm_qos_request idle_pm_qos;
-#ifdef CONFIG_MSM_CAMERA_WAKELOCK
-	struct wake_lock wake_lock;
-#endif
-	
-#ifdef CONFIG_PANTECH_CAMERA_SUSPEND_LOCK
-	struct wake_lock suspend_lock;
-#endif
 	struct platform_device *pdev;
 	int16_t ignore_qcmd_type;
 	uint8_t ignore_qcmd;

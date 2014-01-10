@@ -24,21 +24,31 @@
 #include <linux/nmi.h>
 #include <linux/dmi.h>
 
+#ifdef CONFIG_PANTECH_RESET_REASON
+#include "../arch/arm/mach-msm/sky_sys_reset.h"
+#endif
+
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+#include <mach/pantech_debug.h>
+#endif
+#endif
+
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
 
 /* Machine specific panic information string */
 char *mach_panic_string;
 
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING 
+int panic_on_oops = 1;
+#else
 int panic_on_oops;
+#endif
 static unsigned long tainted_mask;
 static int pause_on_oops;
 static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
-
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-extern void apainc_kernel_stack_dump_end(void);
-#endif
 
 #ifndef CONFIG_PANIC_TIMEOUT
 #define CONFIG_PANIC_TIMEOUT 0
@@ -84,6 +94,10 @@ void panic(const char *fmt, ...)
 	long i, i_next = 0;
 	int state = 0;
 
+#ifdef CONFIG_PANTECH_RESET_REASON
+	sky_sys_rst_set_reboot_info(SYS_RESET_REASON_LINUX);
+#endif
+
 	/*
 	 * Disable local interrupts. This will prevent panic_smp_self_stop
 	 * from deadlocking the first cpu that invokes the panic, since
@@ -105,15 +119,23 @@ void panic(const char *fmt, ...)
 	if (!spin_trylock(&panic_lock))
 		panic_smp_self_stop();
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+    if(pantech_debug_enable)
+	    pantechdbg_sched_msg("!!panic!!");
+#endif
+#endif
+
 	console_verbose();
 	bust_spinlocks(1);
 	va_start(args, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 	printk(KERN_EMERG "Kernel panic - not syncing: %s\n",buf);
+
 	
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
-	apainc_kernel_stack_dump_end();
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING //p14291_smp
+		__save_regs_and_mmu_in_panic();
 #endif
 
 #ifdef CONFIG_DEBUG_BUGVERBOSE
@@ -148,13 +170,6 @@ void panic(const char *fmt, ...)
 		panic_blink = no_blink;
 
 	if (panic_timeout > 0) {
-
-#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING  
-		printk(KERN_EMERG "Rebooting cause of Linux Crash ");
-		if(arm_crash_reset){
-			arm_crash_reset();
-		} 
-#endif  
 		/*
 		 * Delay timeout seconds before rebooting the machine.
 		 * We can't use the "normal" timers since we just panicked.

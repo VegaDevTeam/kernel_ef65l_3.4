@@ -463,6 +463,7 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	}
 
 	if (card->ext_csd.rev >= 5) {
+#if 0	//p13156 eMMC Operation Error			
 		/* check whether the eMMC card support BKOPS */
 		if (ext_csd[EXT_CSD_BKOPS_SUPPORT] & 0x1) {
 			card->ext_csd.bkops = 1;
@@ -480,7 +481,7 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 					card->ext_csd.bkops_en = 1;
 			}
 		}
-
+#endif
 		/* check whether the eMMC card supports HPI */
 		if (ext_csd[EXT_CSD_HPI_FEATURES] & 0x1) {
 			card->ext_csd.hpi = 1;
@@ -1428,6 +1429,8 @@ static int mmc_suspend(struct mmc_host *host)
 		(host->caps2 & MMC_CAP2_POWER_OFF_VCCQ_DURING_SUSPEND)) {
 		err = mmc_poweroff_notify(host, MMC_PW_OFF_NOTIFY_SHORT);
 	} else {
+/* p14774 : remove : mmc_card_can_sleep : for current consumption */
+#if 0
 		if (mmc_card_can_sleep(host))
 			/*
 			 * If sleep command has error it doesn't mean host
@@ -1439,6 +1442,9 @@ static int mmc_suspend(struct mmc_host *host)
 			 */
 			mmc_card_sleep(host);
 		else if (!mmc_host_is_spi(host))
+			mmc_deselect_cards(host);
+#endif
+		if (!mmc_host_is_spi(host))
 			mmc_deselect_cards(host);
 	}
 	if (!err)

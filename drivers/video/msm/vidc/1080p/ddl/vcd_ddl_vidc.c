@@ -15,6 +15,9 @@
 #include "vcd_ddl_metadata.h"
 #include "vcd_ddl_shared_mem.h"
 #include "vcd_core.h"
+#if 1 // p12554 Case(00961929)_CR(395393)_VT_Reset_1035A
+#include "vcd_res_tracker_api.h"
+#endif
 
 #if defined(PIX_CACHE_DISABLE)
 #define DDL_PIX_CACHE_ENABLE  false
@@ -108,7 +111,12 @@ void ddl_vidc_channel_set(struct ddl_client_context *ddl)
 		dec_pix_cache = VIDC_1080P_DECODE_PCACHE_DISABLE;
 	const enum vidc_1080p_encode_p_cache_enable
 		enc_pix_cache = VIDC_1080P_ENCODE_PCACHE_ENABLE;
+#if 0 // p12554 Case(00961929)_CR(395393)_VT_Reset_1035A
 	u32 pix_cache_ctrl, ctxt_mem_offset, ctxt_mem_size;
+#else
+       u32 pix_cache_ctrl, ctxt_mem_offset, ctxt_mem_size, arg1 = 0;
+       struct ddl_buf_addr *decContext = NULL;
+#endif
 
 	if (ddl->decoding) {
 		ddl_set_core_start_time(__func__, DEC_OP_TIME);
@@ -116,6 +124,13 @@ void ddl_vidc_channel_set(struct ddl_client_context *ddl)
 		pix_cache_ctrl = (u32)dec_pix_cache;
 		ctxt_mem_offset = DDL_ADDR_OFFSET(ddl_context->dram_base_a,
 		ddl->codec_data.decoder.hw_bufs.context) >> 11;
+#if 1 // p12554 Case(00961929)_CR(395393)_VT_Reset_1035A
+              if (!res_trk_check_for_sec_session()) {
+                   decContext = &(ddl->codec_data.decoder.hw_bufs.context);
+                   memset(decContext->align_virtual_addr,
+                    0, decContext->buffer_size);
+              }
+#endif
 		ctxt_mem_size =
 			ddl->codec_data.decoder.hw_bufs.context.buffer_size;
 	} else {
@@ -184,8 +199,17 @@ void ddl_vidc_channel_set(struct ddl_client_context *ddl)
 	DDL_MSG_LOW("ddl_state_transition: %s ~~> DDL_CLIENT_WAIT_FOR_CHDONE",
 	ddl_get_state_string(ddl->client_state));
 	ddl->client_state = DDL_CLIENT_WAIT_FOR_CHDONE;
+#if 1 // p12554 Case(00961929)_CR(395393)_VT_Reset_1035A
+       arg1 = (u32)codec;
+       if (!res_trk_check_for_sec_session())
+            arg1 |= (1 << 29);
+#endif
 	vidc_1080p_set_host2risc_cmd(VIDC_1080P_HOST2RISC_CMD_OPEN_CH,
+#if 0 // p12554 Case(00961929)_CR(395393)_VT_Reset_1035A
 		(u32)codec, pix_cache_ctrl, ctxt_mem_offset,
+#else
+              arg1, pix_cache_ctrl, ctxt_mem_offset,
+#endif
 		ctxt_mem_size);
 }
 

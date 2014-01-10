@@ -252,6 +252,7 @@ static int snddev_icodec_open_lb(struct snddev_icodec_state *icodec)
 static int initialize_msm_icodec_gpios(struct platform_device *pdev)
 {
 	int rc = 0;
+#ifndef CONFIG_SKYSND_CTRL
 	struct resource *res;
 	int i = 0;
 	int *reg_defaults = pdev->dev.platform_data;
@@ -276,6 +277,8 @@ static int initialize_msm_icodec_gpios(struct platform_device *pdev)
 		i++;
 	}
 err:
+#endif
+
 	return rc;
 }
 static int msm_icodec_gpio_probe(struct platform_device *pdev)
@@ -283,10 +286,14 @@ static int msm_icodec_gpio_probe(struct platform_device *pdev)
 	int rc = 0;
 
 	rc = initialize_msm_icodec_gpios(pdev);
+	
+#ifndef CONFIG_SKYSND_CTRL
 	if (rc < 0) {
 		pr_err("%s: GPIO configuration failed\n", __func__);
 		return -ENODEV;
 	}
+#endif
+
 	return rc;
 }
 static struct platform_driver msm_icodec_gpio_driver = {

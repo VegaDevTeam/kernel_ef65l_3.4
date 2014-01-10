@@ -84,6 +84,12 @@
 #include "sched.h"
 #include "../workqueue_sched.h"
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+#include <mach/pantech_debug.h> 
+#endif
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
@@ -3240,6 +3246,13 @@ need_resched:
 		 * is still correct, but it can be moved to another cpu/rq.
 		 */
 		cpu = smp_processor_id();
+		
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+        if(pantech_debug_enable)
+		    pantech_debug_task_sched_log(cpu, rq->curr);
+#endif
+#endif
 		rq = cpu_rq(cpu);
 	} else
 		raw_spin_unlock_irq(&rq->lock);
@@ -3347,6 +3360,13 @@ asmlinkage void __sched notrace preempt_schedule(void)
 		return;
 
 	do {
+		
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+        if(pantech_debug_enable)
+		    pantechdbg_sched_msg(">prmptsched_irq");
+#endif
+#endif
 		add_preempt_count_notrace(PREEMPT_ACTIVE);
 		__schedule();
 		sub_preempt_count_notrace(PREEMPT_ACTIVE);

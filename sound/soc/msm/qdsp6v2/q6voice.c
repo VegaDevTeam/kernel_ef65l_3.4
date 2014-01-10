@@ -2483,6 +2483,12 @@ static int voice_send_rx_device_mute_cmd(struct voice_data *v)
 	cvp_mute_cmd.hdr.opcode = VSS_IVOCPROC_CMD_SET_MUTE;
 	cvp_mute_cmd.cvp_set_mute.direction = 1;
 	cvp_mute_cmd.cvp_set_mute.mute_flag = v->dev_rx.mute;
+
+/* 2013-05-21 LS1@SND CASE#01195350 [MSM8974] voice rx device mute is not working */	
+#ifdef CONFIG_SKY_SND_AUTOANSWER //CONFIG_PANTECH_SND_QCOM_PATCH
+	cvp_mute_cmd.cvp_set_mute.ramp_duration_ms = DEFAULT_MUTE_RAMP_DURATION;
+#endif
+	
 	v->cvp_state = CMD_STATUS_FAIL;
 	ret = apr_send_pkt(apr_cvp, (uint32_t *) &cvp_mute_cmd);
 	if (ret < 0) {

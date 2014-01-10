@@ -126,7 +126,6 @@ struct msm_fb_data_type {
 	__u32 channel_irq;
 
 	struct mdp_dma_data *dma;
-	struct device_attribute dev_attr;
 	void (*dma_fnc) (struct msm_fb_data_type *mfd);
 	int (*cursor_update) (struct fb_info *info,
 			      struct fb_cursor *cursor);
@@ -137,8 +136,6 @@ struct msm_fb_data_type {
 	int (*start_histogram) (struct mdp_histogram_start_req *req);
 	int (*stop_histogram) (struct fb_info *info, uint32_t block);
 	void (*vsync_ctrl) (int enable);
-	void (*vsync_init) (int cndx);
-	void *vsync_show;
 	void *cursor_buf;
 	void *cursor_buf_phys;
 
@@ -190,7 +187,6 @@ struct msm_fb_data_type {
 	u32 writeback_state;
 	bool writeback_active_cnt;
 	int cont_splash_done;
-	int vsync_sysfs_created;
 };
 
 struct dentry *msm_fb_get_debugfs_root(void);
@@ -222,13 +218,6 @@ int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd,
 
 #ifdef CONFIG_FB_MSM_LOGO
 #define INIT_IMAGE_FILE "/initlogo.rle"
-#ifdef CONFIG_SW_RESET
-#define REBOOT_IMAGE_FILE "/reboot.rle"
-#endif
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-#define BATTERY_IMAGE_FILE "/logo2.rle"
-#endif
-
 int load_565rle_image(char *filename, bool bf_supported);
 #endif
 

@@ -404,20 +404,6 @@ else
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL := -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a8 -march=armv7-a -mfpu=neon -ftree-vectorize -funswitch-loops
 endif
-######################################################################
-# SKY_ANDROID_FLAGS
-######################################################################
-# Android SKY cust Feature
-# Add START. by sungwook on 2010-05-07
-#----------------------------------------------------------------------
-KBUILD_CFLAGS   += "-include" $(PWD)"/include/BOARD_REV.h"
-KBUILD_CFLAGS   += $(SKY_KERNEL_FLAGS)
-#----------------------------------------------------------------------
-#20110819 choiseulkee add for kernel user build
-ifeq ($(TARGET_BUILD_VARIANT),user)
-KBUILD_CFLAGS   += -DTARGET_BUILD_USER
-endif
-#----------------------------d------------------------------------------
 
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=

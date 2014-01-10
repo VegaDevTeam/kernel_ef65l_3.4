@@ -25,9 +25,14 @@
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/time.h>
+#include <mach/pantech_apanic.h>
 #include "logger.h"
 
 #include <asm/ioctls.h>
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+#define LOGCAT_HEADER_SIZE 0xC
+#endif
 
 /*
  * struct logger_log - represents a specific log, such as 'main' or 'radio'
@@ -710,23 +715,43 @@ static const struct file_operations logger_fops = {
  * must be a power of two, and greater than
  * (LOGGER_ENTRY_MAX_PAYLOAD + sizeof(struct logger_entry)).
  */
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING 
 #define DEFINE_LOGGER_DEVICE(VAR, NAME, SIZE) \
-static unsigned char _buf_ ## VAR[SIZE]; \
-static struct logger_log VAR = { \
-	.buffer = _buf_ ## VAR, \
-	.misc = { \
-		.minor = MISC_DYNAMIC_MINOR, \
-		.name = NAME, \
-		.fops = &logger_fops, \
-		.parent = NULL, \
+	static unsigned char _buf_ ## VAR[SIZE + LOGCAT_HEADER_SIZE]; \
+	static struct logger_log VAR = { \
+		.buffer = _buf_ ## VAR, \
+		.misc = { \
+			.minor = MISC_DYNAMIC_MINOR, \
+			.name = NAME, \
+			.fops = &logger_fops, \
+			.parent = NULL, \
 	}, \
-	.wq = __WAIT_QUEUE_HEAD_INITIALIZER(VAR .wq), \
-	.readers = LIST_HEAD_INIT(VAR .readers), \
-	.mutex = __MUTEX_INITIALIZER(VAR .mutex), \
-	.w_off = 0, \
-	.head = 0, \
-	.size = SIZE, \
-};
+		.wq = __WAIT_QUEUE_HEAD_INITIALIZER(VAR .wq), \
+		.readers = LIST_HEAD_INIT(VAR .readers), \
+		.mutex = __MUTEX_INITIALIZER(VAR .mutex), \
+		.w_off = 0, \
+		.head = 0, \
+		.size = SIZE, \
+	};
+#else
+#define DEFINE_LOGGER_DEVICE(VAR, NAME, SIZE) \
+	static unsigned char _buf_ ## VAR[SIZE]; \
+	static struct logger_log VAR = { \
+		.buffer = _buf_ ## VAR, \
+		.misc = { \
+			.minor = MISC_DYNAMIC_MINOR, \
+			.name = NAME, \
+			.fops = &logger_fops, \
+			.parent = NULL, \
+		}, \
+		.wq = __WAIT_QUEUE_HEAD_INITIALIZER(VAR .wq), \
+		.readers = LIST_HEAD_INIT(VAR .readers), \
+		.mutex = __MUTEX_INITIALIZER(VAR .mutex), \
+		.w_off = 0, \
+		.head = 0, \
+		.size = SIZE, \
+	};
+#endif
 
 DEFINE_LOGGER_DEVICE(log_main, LOGGER_LOG_MAIN, 256*1024)
 DEFINE_LOGGER_DEVICE(log_events, LOGGER_LOG_EVENTS, 256*1024)
@@ -747,57 +772,16 @@ static struct logger_log *get_log_from_minor(int minor)
 }
 
 #ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+static struct pantech_log_header pantech_log;
 
-struct logger_log *cur_log;
-
-#define LOGCAT_BUF_MASK (cur_log->size-1)
-#define LOGCAT_BUF(idx) (cur_log->buffer[(idx) & LOGCAT_BUF_MASK])
-
-static int logcat_buf_get_len(void)
+struct pantech_log_header *get_pantech_logcat_dump_address(void)
 {
-	return cur_log->w_off;
+    pantech_log.logcat_buf_address = (uint32_t*)virt_to_phys((void*)log_main.buffer);
+    pantech_log.logcat_w_off = (uint32_t*)virt_to_phys((void*)&(log_main.w_off));
+    pantech_log.logcat_size = (uint32_t)log_main.size;
+    
+    return &pantech_log;
 }
-
-void logcat_set_log(int index)
-{
-	switch(index){
-		case 1:
-			cur_log = &log_main;
-			break;
-		case 2:
-			cur_log = &log_events;
-			break;
-		case 3:
-			cur_log = &log_radio;
-			break;
-		case 4:
-			cur_log = &log_system;
-			break;
-		default:
-			cur_log = &log_system;
-			break;
-	}
-}
-
- int logcat_buf_copy(char *dest,int idx,int len)
-{
-	int ret, max;
-	max = logcat_buf_get_len();
-	if (idx < 0 || idx >= max) {
-			ret = -1;
-	} else {
-		if (len > max - idx)
-			len = max - idx;
-		ret = len;
-		idx += (cur_log->w_off - max);
-		while (len-- > 0)
-			dest[len] = LOGCAT_BUF(idx + len);
-	}
-
-	return ret;
-}
-
-
 #endif
 
 static int __init init_log(struct logger_log *log)

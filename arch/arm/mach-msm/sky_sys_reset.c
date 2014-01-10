@@ -68,6 +68,13 @@
 #include "smd_private.h"
 #include <mach/msm_rpcrouter.h>
 #include <mach/oem_rapi_client.h>
+#include <mach/msm_smsm.h>
+#include <mach/msm_iomap.h>
+#if defined(CONFIG_PANTECH_DEBUG)
+#ifdef CONFIG_PANTECH_DEBUG_SCHED_LOG  //p14291_pantech_dbg
+#include <mach/pantech_debug.h> 
+#endif
+#endif
 
 #define DEBUG
 /* #undef DEBUG */
@@ -78,370 +85,162 @@
 #endif
 
 typedef enum { 
-        USER_RESET = 0x00000000,
-        SW_RESET = 0x00000001,
-        PDL_RESET = 0x00000002,
+  USER_RESET = 0x00000000,
+  SW_RESET = 0x00000001,
+  PDL_RESET = 0x00000002,
 }SYS_RST_RESET_TYPE_E;
 
 typedef enum{
-        MAIN_LCD_BL_OFF = 0x00000000,
-        MAIN_LCD_BL_ON  = 0x0A0F090F,
+  MAIN_LCD_BL_OFF = 0x00000000,
+  MAIN_LCD_BL_ON  = 0x0A0F090F,
 }SYS_RST_LCD_BL_STATE_E;
-
+ 
 typedef enum{
-        RST_LCD_BL_OFF=0x00000000,
-        RST_LCD_BL_ON =0x00000001,
-        RST_LCD_BL_USER=0x00000002, 
+  RST_LCD_BL_OFF=0x00000000,
+  RST_LCD_BL_ON =0x00000001,
+  RST_LCD_BL_USER=0x00000002, 
 }SYS_RST_LCD_BL_E;
 
-typedef struct{
-        uint32_t reason;
-        uint32_t reset;
-        uint32_t backlight; 
-        uint32_t silent_boot;
-        char log_buffer[512];
-}SYS_RST_SMEM_T;
+#ifdef CONFIG_PANTECH_RESET_REASON
+int sky_reset_reason = SYS_RESET_REASON_ABNORMAL;
+int sky_prev_reset_reason = SYS_RESET_REASON_ABNORMAL;
+static int silent_boot_mode = 0;
+static int backlight_mode_before_reset = 0;
 
-typedef SYS_RST_SMEM_T  smem_id_vendor0_type;
+#ifdef CONFIG_PANTECH_LCD_SILENT_BOOT
+static int backlight_mode = 0;
+#endif
+static int inited_reboot_info_flag = 0;
+#endif
 
-static volatile smem_id_vendor0_type *smem_id_vendor0_ptr;
-
-static uint32_t rst_prev_reason, rst_prev_reset, rst_prev_backlight, rst_prev_silent_boot;
 
 /*
 * ** FUNCTION DEFINATION ***
 */
-uint32_t sky_sys_rst_GetResetReason(void)
-{
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        return smem_id_vendor0_ptr->reason;
-}
-EXPORT_SYMBOL(sky_sys_rst_GetResetReason);
+#ifdef CONFIG_PANTECH_RESET_REASON
+void sky_sys_rst_init_reboot_info(void)
+{ 
+    void *restart_addr = NULL;
+    unsigned int reboot_mode = 0;
 
-uint32_t sky_sys_rst_GetReset(void)
-{
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        return smem_id_vendor0_ptr->reset;
-}
-EXPORT_SYMBOL(sky_sys_rst_GetReset);
+    if( inited_reboot_info_flag != 0 )
+        return;
+    
+    restart_addr = PANTECH_RESTART_REASON_ADDR;
+    reboot_mode = __raw_readl(restart_addr);
+    printk(KERN_INFO "[%s] reboot_mode: 0x%x, \n",__func__,reboot_mode);
 
-uint32_t sky_sys_rst_GetLcdBLStatus(void)
-{
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        return smem_id_vendor0_ptr->backlight;
-}
-EXPORT_SYMBOL(sky_sys_rst_GetLcdBLStatus);
+    //get flag clear reset reason
+    sky_prev_reset_reason = WHAT_SYS_RESET;
+    printk(KERN_INFO "[%s] sky_prev_reset_reason: 0x%x, \n",__func__,sky_prev_reset_reason);
 
-uint32_t sky_sys_rst_GetSilentBoot(void)
-{
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        return smem_id_vendor0_ptr->silent_boot;
-}
-EXPORT_SYMBOL(sky_sys_rst_GetSilentBoot);
+    //1. backlight flag set
+    if( IS_BACKLIGHT_OFF_FLAG )
+        backlight_mode_before_reset = 0;
+    else
+        backlight_mode_before_reset = 1;
 
-char *sky_sys_rst_GetLogBuffer(void)
-{
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        return (char*)&smem_id_vendor0_ptr->log_buffer[0];
-}
-EXPORT_SYMBOL(sky_sys_rst_GetLogBuffer);
+    //2. silent boot mode set
+    silent_boot_mode = IS_SYS_RESET;
 
-#if 0 //P11175
-int sky_sys_rst_SetSwReset(uint32_t *reason)
-{
-        int r;	
-        uint32_t type; 
-        
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        
-        type = SMEM_PROC_COMM_CUSTOMER_CMD1_SET_SW_RESET;
-        r = msm_proc_comm(PCOM_CUSTOMER_CMD1, &type, reason);
-        if(r >= 0)
-        {
-                smem_id_vendor0_ptr->reset = SW_RESET;	
-                if(reason)
-                        smem_id_vendor0_ptr->reason = *reason;
-                else
-                        smem_id_vendor0_ptr->reason = 0x00000000;
-        }
-        return r;
-}
-EXPORT_SYMBOL(sky_sys_rst_SetSwReset);
-
-int sky_sys_rst_SetUserReset(uint32_t *reason)
-{
-        int r;	
-        uint32_t type; 
-        
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        
-        type = SMEM_PROC_COMM_CUSTOMER_CMD1_SET_USER_RESET;
-        r = msm_proc_comm(PCOM_CUSTOMER_CMD1, &type, reason);
-        if(r >= 0)
-        {
-                smem_id_vendor0_ptr->reset = USER_RESET;	
-                if(reason)
-                        smem_id_vendor0_ptr->reason = *reason;
-                else
-                        smem_id_vendor0_ptr->reason = 0x00000000;
-        }
-        return r;
-}
-EXPORT_SYMBOL(sky_sys_rst_SetUserReset);
-
-int sky_sys_rst_SetLcdBLStatus(uint32_t eBrightness)
-{
-        int r;	
-        uint32_t type; 
-        
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        
-        type = SMEM_PROC_COMM_CUSTOMER_CMD1_SET_BL_STATUS;
-        r = msm_proc_comm(PCOM_CUSTOMER_CMD1, &type, &eBrightness);
-        if(r >= 0)
-        {
-                if(!eBrightness) {
-                        smem_id_vendor0_ptr->backlight = RST_LCD_BL_OFF;//MAIN_LCD_BL_OFF;	
-                } else {
-                        smem_id_vendor0_ptr->backlight = RST_LCD_BL_ON;//MAIN_LCD_BL_ON;
-                }
-        }
-        return r;
-}
-EXPORT_SYMBOL(sky_sys_rst_SetLcdBLStatus);
+#if defined(CONFIG_PANTECH_DEBUG)
+    //3. pantech dbg mode set
+    if( IS_RAMDUMP_FLAG )
+        pantech_debug_enable = 1;
+    else
+        pantech_debug_enable = 0;
 #endif
 
-void sky_sys_rst_SetSilentBoot(uint32_t mode)
-{
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        smem_id_vendor0_ptr->silent_boot = mode;
-}
-EXPORT_SYMBOL(sky_sys_rst_SetSilentBoot);
-#if 0
-int sky_sys_rst_SwReset(uint32_t *reason)
-{
-	int r;	
-	uint32_t type; 
-
-	type = SMEM_PROC_COMM_CUSTOMER_CMD1_SW_RESET;
-	r = msm_proc_comm(PCOM_CUSTOMER_CMD1, &type, reason);
-
-	return r;
-}
-EXPORT_SYMBOL(sky_sys_rst_SwReset);
-
-int sky_sys_rst_UserReset(uint32_t *reason)
-{
-	int r;	
-	uint32_t type; 
-
-	type = SMEM_PROC_COMM_CUSTOMER_CMD1_USER_RESET;
-	r = msm_proc_comm(PCOM_CUSTOMER_CMD1, &type, reason);
-
-	return r;
-}
-EXPORT_SYMBOL(sky_sys_rst_UserReset);
-
-int sky_sys_rst_SwReset_imm(uint32_t *reason)
-{
-	int r;	
-	uint32_t type; 
-
-	type = SMEM_PROC_COMM_CUSTOMER_CMD1_SW_RESET_IMM;
-	r = msm_proc_comm(PCOM_CUSTOMER_CMD1, &type, reason);
-
-	return r;
-}
-EXPORT_SYMBOL(sky_sys_rst_SwReset_imm);
-
-int sky_sys_rst_UserReset_imm(uint32_t *reason)
-{
-	int r;	
-	uint32_t type; 
-
-	type = SMEM_PROC_COMM_CUSTOMER_CMD1_USER_RESET_IMM;
-	r = msm_proc_comm(PCOM_CUSTOMER_CMD1, &type, reason);
-
-	return r;
-}
-EXPORT_SYMBOL(sky_sys_rst_UserReset_imm); 
-
-int sky_sys_rst_SetSwReset_exception(void)
-{
-
-	uint32_t reason = SYS_RESET_REASON_EXCEPTION;
-
-	return sky_sys_rst_SetSwReset(&reason);
-}
-EXPORT_SYMBOL(sky_sys_rst_SetSwReset_exception);
-
-int sky_sys_rst_SetSwReset_assert(void)
-{
-
-	uint32_t reason = SYS_RESET_REASON_ASSERT;
-
-	return sky_sys_rst_SetSwReset(&reason);
-}
-EXPORT_SYMBOL(sky_sys_rst_SetSwReset_assert);
-
-void sky_sys_rst_PowerDown(void)
-{
-	uint32_t type; 
-
-	type = SMEM_PROC_COMM_CUSTOMER_CMD1_POWER_DOWN;
-	msm_proc_comm(PCOM_CUSTOMER_CMD1, &type, 0);
-}
-EXPORT_SYMBOL(sky_sys_rst_PowerDown);
+#if defined(CONFIG_PANTECH_DEBUG)
+    printk(KERN_INFO "[%s] backlight_mode_before_reset: %i, silent_boot_mode: %i, pantech_debug_enable: %i\n", __func__, backlight_mode_before_reset, silent_boot_mode, pantech_debug_enable);
+#else
+    printk(KERN_INFO "[%s] backlight_mode_before_reset: %i, silent_boot_mode: %i\n", __func__, backlight_mode_before_reset, silent_boot_mode);
 #endif
-void sky_sys_rst_NotiToMARM(uint32_t *reason)
-{
-        struct msm_rpc_client *client;
-        static struct oem_rapi_client_streaming_func_arg arg;
-        static struct oem_rapi_client_streaming_func_ret ret;
-        
-        client = oem_rapi_client_init();
-        
-        if(IS_ERR(client))
-        {
-                return;
-        }
-        
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        
-        arg.event = 62; //OEM_RAPI_CLIENT_EVENT_SKY_AARM_ERR_LOGGING
-        arg.cb_func = 0;
-        arg.handle = 0;
-        arg.in_len = sizeof(uint32_t);
-        arg.input = (char *)reason;
-        arg.out_len_valid = 1;
-        arg.output_valid = 1;
-        arg.output_size = 128;
-        
-        ret.out_len = NULL;
-        ret.output = NULL;
-        
-        oem_rapi_client_streaming_function(client, &arg, &ret);
-        
-        smem_id_vendor0_ptr->reset = SW_RESET;	
-        if(reason)
-                smem_id_vendor0_ptr->reason = *reason;
-        else
-                smem_id_vendor0_ptr->reason = 0x00000000;
+
+	//write reset reason default abnormal
+    __raw_writel(SYS_RESET_REASON_ABNORMAL, restart_addr);
+    sky_reset_reason = SYS_RESET_REASON_ABNORMAL;
+    
+    inited_reboot_info_flag = 1;
 }
-EXPORT_SYMBOL(sky_sys_rst_NotiToMARM);
+EXPORT_SYMBOL(sky_sys_rst_init_reboot_info);
+#endif
 
-void sky_sys_rst_set_prev_reset_info(void)
+#if defined(CONFIG_PANTECH_LCD_SILENT_BOOT) && defined(CONFIG_PANTECH_RESET_REASON)
+uint8_t sky_sys_rst_get_silent_boot_mode(void)
 {
-        void *restart_addr;
-        int reason;
-        
-        restart_addr = ioremap_nocache(RESTART_REASON_ADDR, 0x1000);
-        reason = readl(restart_addr);
-        iounmap(restart_addr);
-        switch(reason)
-        {
-        case SYS_RESET_REASON_EXCEPTION:
-        case SYS_RESET_REASON_ASSERT:
-        case SYS_RESET_REASON_LINUX:
-        case SYS_RESET_REASON_ANDROID:
-        case SYS_RESET_REASON_UNKNOWN:    
-        case SYS_RESET_REASON_ABNORMAL:    
-                rst_prev_silent_boot =1;
-                break;
-        default:
-                rst_prev_silent_boot =0;
-                break;
-        }
-        
-        if(rst_prev_silent_boot)
-                rst_prev_reason = reason;
-        else
-                rst_prev_reason = 0;
-        
-        rst_prev_reset = sky_sys_rst_GetReset();
-        rst_prev_backlight = sky_sys_rst_GetLcdBLStatus();
-}
-EXPORT_SYMBOL(sky_sys_rst_set_prev_reset_info);
+  if( inited_reboot_info_flag == 0 )
+    sky_sys_rst_init_reboot_info();
 
-int sky_sys_rst_read_proc_reset_info
-(char *page, char **start, off_t off, int count, int *eof, void *data)
+  return silent_boot_mode;
+}
+EXPORT_SYMBOL(sky_sys_rst_get_silent_boot_mode);
+
+uint8_t sky_sys_rst_get_silent_boot_backlight(void)
 {
-        int len = 0;
-        
-        //len = sprintf(page, "Reason: %d\n", sky_sys_rst_GetResetReason());
-        len = sprintf(page, "Reason: 0x%x\n", rst_prev_reason);
-        len += sprintf(page + len , "Reset: %d\n", rst_prev_reset);
-        len += sprintf(page + len, "Backlight: %d\n", rst_prev_backlight);
-        len += sprintf(page + len, "SilentBoot: %d\n", rst_prev_silent_boot);
-        
-        // After this is called, silent_boot_mode must have to be 0.
-        sky_sys_rst_SetSilentBoot(0);
-        return len;
-}
-EXPORT_SYMBOL(sky_sys_rst_read_proc_reset_info);
+  if( inited_reboot_info_flag == 0 )
+    sky_sys_rst_init_reboot_info();
 
-int sky_sys_rst_write_proc_reset_info(struct file *file, const char *buffer, unsigned long count, void *data)
+  printk(KERN_INFO "[%s] backlight show= %d\n",__func__,backlight_mode_before_reset);
+  return backlight_mode_before_reset;
+}
+EXPORT_SYMBOL(sky_sys_rst_get_silent_boot_backlight);
+
+void sky_sys_rst_set_silent_boot_backlight(int backlight)
 {
-        int len;
-        char tbuffer[2];
-        
-        if(count > 1 )
-                len = 1;
-	
-        memset(tbuffer, 0x00, 2);
+  void *restart_addr = NULL;
+  unsigned reboot_mode = 0;
 
-        if(copy_from_user(tbuffer, buffer, len))
-                return -EFAULT;
-	
-        tbuffer[len] = '\0';
-        
-        if(tbuffer[0] >= '0' && tbuffer[0] <= '9')
-                rst_prev_reset = tbuffer[0] - '0';
-        
-        return len;
+  if( inited_reboot_info_flag == 0 )
+    sky_sys_rst_init_reboot_info();
+
+  backlight_mode = backlight;
+
+  restart_addr = PANTECH_RESTART_REASON_ADDR;
+  reboot_mode = __raw_readl(restart_addr);
+  if( backlight == 0 )
+  {
+    reboot_mode |= SYS_RESET_BACKLIGHT_OFF_FLAG;
+  }
+  else
+  {
+    reboot_mode &= ~SYS_RESET_BACKLIGHT_OFF_FLAG;
+  }
+  __raw_writel(reboot_mode, restart_addr);
+
+  printk(KERN_INFO "[%s] backlight store= %d, 0x%x\n",__func__,backlight,reboot_mode);
 }
-EXPORT_SYMBOL(sky_sys_rst_write_proc_reset_info);
+EXPORT_SYMBOL(sky_sys_rst_set_silent_boot_backlight);
+#endif /* CONFIG_PANTECH_LCD_SILENT_BOOT */
 
-bool sky_sys_rst_is_silent_boot_mode(void)
+#ifdef CONFIG_PANTECH_RESET_REASON
+void sky_sys_rst_set_reboot_info(int reset_reason)
 {
-        if(smem_id_vendor0_ptr == NULL)
-        {
-                smem_id_vendor0_ptr = (smem_id_vendor0_type*)smem_alloc(SMEM_ID_VENDOR0, sizeof(smem_id_vendor0_type));
-        } 
-        
-        if(smem_id_vendor0_ptr->silent_boot)
-                return true;
-        return false;
-}
-EXPORT_SYMBOL(sky_sys_rst_is_silent_boot_mode);
+  void *restart_addr = NULL;
 
+  if(sky_reset_reason != SYS_RESET_REASON_ABNORMAL){
+      printk(KERN_INFO "[%s] skip set : previous reason = 0x%x\n",__func__, sky_reset_reason);
+      return;
+  }
+  
+  sky_reset_reason = reset_reason;
+  
+  restart_addr = PANTECH_RESTART_REASON_ADDR;
+
+#ifdef CONFIG_PANTECH_LCD_SILENT_BOOT
+  if( backlight_mode == 0 )
+  {
+    reset_reason |= SYS_RESET_BACKLIGHT_OFF_FLAG;
+  }
+  else
+  {
+    reset_reason &= ~SYS_RESET_BACKLIGHT_OFF_FLAG;
+  }
+#endif
+
+  __raw_writel(reset_reason, restart_addr);  
+
+  printk(KERN_INFO "[%s] reset_reason:0x%x\n",__func__,reset_reason);
+}
+EXPORT_SYMBOL(sky_sys_rst_set_reboot_info);
+#endif

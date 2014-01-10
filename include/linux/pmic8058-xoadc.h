@@ -45,7 +45,9 @@ struct xoadc_conv_state {
 #define XOADC_MPP_3		0x2
 #define XOADC_MPP_4             0X3
 #define XOADC_MPP_5             0x4
-#define XOADC_MPP_6             0x5
+#if defined(CONFIG_TOUCHSCREEN_QT602240) && (defined(CONFIG_PANTECH_EF39S_BOARD) || defined(CONFIG_PANTECH_EF40K_BOARD) || defined(CONFIG_PANTECH_EF40S_BOARD))
+#define XOADC_MPP_6				0x5		//Add for JB upgrade. p13837 - EF39 40
+#endif
 #define XOADC_MPP_7             0x6
 #define XOADC_MPP_8             0x7
 #define XOADC_MPP_10		0X9

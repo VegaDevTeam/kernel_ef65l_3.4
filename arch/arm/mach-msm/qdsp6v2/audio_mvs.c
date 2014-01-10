@@ -26,9 +26,20 @@
 
 #include <mach/qdsp6v2/q6voice.h>
 #include <mach/cpuidle.h>
-#ifdef CONFIG_SKY_SND_MVS //N1066 20120410 Sound Patch
+
+#if defined (CONFIG_SKY_SND_MVS)
 #include "audio_mvs_adv.h"
+
+#ifdef CONFIG_SKYSND_CTRL
+#include "sky_snd_max9879.h"
+#endif
+
+#ifdef CONFIG_SKY_SND_CTRL //N1066 20120410 Sound Patch
 #include "sky_snd_ext_amp_max97001.h"
+#endif
+
+extern call_mode_e g_CallMode;
+static int mvs_if_used = 0;
 #endif
 
 /* Each buffer is 20 ms, queue holds 200 ms of data. */
@@ -72,7 +83,6 @@ struct audio_mvs_info_type {
 	spinlock_t dsp_lock;
 
 	struct wake_lock suspend_lock;
-	struct wake_lock idle_lock;
 	struct pm_qos_request pm_qos_req;
 
 	void *memory_chunk;
@@ -94,564 +104,595 @@ static uint32_t audio_mvs_get_rate(uint32_t mvs_mode, uint32_t rate_type)
 
 	return cvs_rate;
 }
-
-#ifdef CONFIG_SKY_SND_MVS //N1066 20120410 Sound Patch
 static void audio_mvs_process_ul_pkt(uint8_t *voc_pkt,
 				     uint32_t pkt_len,
 				     void *private_data)
 {
-	struct audio_mvs_info_type *audio = private_data;
-	unsigned long dsp_flags;
 
-	spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
-       if(mvs_adv_get_state()<MVS_START)      {
-            //pr_info("%s: playback is not ready(state=%d)\n", __func__, bf.tx.state);   
-            spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
-            return;
-       }
-       
-	if(audio->mvs_mode==MVS_MODE_AMR) {
-           audio_adv_mvs_process_amr_uplink(voc_pkt, pkt_len, private_data);
-	}
-       else {
-           audio_adv_mvs_process_pcm_uplink(voc_pkt, pkt_len, private_data); 
-       }
-	spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
-}
+#if defined (CONFIG_SKY_SND_MVS_AMR) //20130712 jhsong : EF35L for VT / FMC use MVS IF(amr or pcm)
+	if((g_CallMode == MODE_VT) || (g_CallMode == MODE_VOIP)){
+		struct audio_mvs_info_type *audio = private_data;
+		unsigned long dsp_flags;
 
-static void audio_mvs_process_dl_pkt(uint8_t *voc_pkt,
-				     uint32_t *pkt_len,
-				     void *private_data)
-{
-	struct audio_mvs_info_type *audio = private_data;
-	unsigned long dsp_flags;
-  
-	spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
-
-       if(mvs_adv_get_state()<MVS_START)      {
-            //pr_info("%s: playback is not ready(state=%d)\n", __func__, bf.rx.state);   
-            *pkt_len = 0;
-            spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
-            return;
-       }
-
-	if(audio->mvs_mode==MVS_MODE_AMR) {
-            audio_adv_mvs_process_amr_downlink(voc_pkt, pkt_len, private_data);
-	}
-       else {
-            audio_adv_mvs_process_pcm_downlink(voc_pkt, pkt_len, private_data);
-       }
-	spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
-}
-#else // CONFIG_SKY_SND_MVS
-static void audio_mvs_process_ul_pkt(uint8_t *voc_pkt,
-				     uint32_t pkt_len,
-				     void *private_data)
-{
-	struct audio_mvs_buf_node *buf_node = NULL;
-	struct audio_mvs_info_type *audio = private_data;
-	unsigned long dsp_flags;
-
-	/* Copy up-link packet into out_queue. */
-	spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
-
-	if (!list_empty(&audio->free_out_queue)) {
-		buf_node = list_first_entry(&audio->free_out_queue,
-					    struct audio_mvs_buf_node,
-					    list);
-		list_del(&buf_node->list);
-
-		switch (audio->mvs_mode) {
-		case MVS_MODE_AMR:
-		case MVS_MODE_AMR_WB: {
-			/* Remove the DSP frame info header. Header format:
-			 * Bits 0-3: Frame rate
-			 * Bits 4-7: Frame type
-			 */
-			buf_node->frame.header.frame_type =
-						((*voc_pkt) & 0xF0) >> 4;
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
-
-			buf_node->frame.len = pkt_len - DSP_FRAME_HDR_LEN;
-
-			memcpy(&buf_node->frame.voc_pkt[0],
-			       voc_pkt,
-			       buf_node->frame.len);
-
-			list_add_tail(&buf_node->list, &audio->out_queue);
-			break;
+		spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
+	       if(mvs_adv_get_state()<MVS_START)      {
+	            //pr_info("%s: playback is not ready(state=%d)\n", __func__, bf.tx.state);   
+	            spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+	            return;
+	       }
+	       
+		if(audio->mvs_mode==MVS_MODE_AMR) {
+	           audio_adv_mvs_process_amr_uplink(voc_pkt, pkt_len, private_data);
 		}
+	       else {
+	           audio_adv_mvs_process_pcm_uplink(voc_pkt, pkt_len, private_data); 
+	       }
+		spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+	}else
+#elif defined (CONFIG_SKY_SND_MVS_PCM)	 //20130712 jhsong : EF33S for FMC use MVS IF (pcm)
+	if(g_CallMode == MODE_VOIP){
+		struct audio_mvs_info_type *audio = private_data;
+		unsigned long dsp_flags;
 
-		case MVS_MODE_IS127: {
-			buf_node->frame.header.packet_rate = (*voc_pkt) & 0x0F;
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+		spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
+	       if(mvs_adv_get_state()<MVS_START)      {
+	            //pr_info("%s: playback is not ready(state=%d)\n", __func__, bf.tx.state);   
+	            spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+	            return;
+	       }
+	       
+              audio_adv_mvs_process_pcm_uplink(voc_pkt, pkt_len, private_data); 
+		spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+	}else
+#endif
+	{
+		struct audio_mvs_buf_node *buf_node = NULL;
+		struct audio_mvs_info_type *audio = private_data;
+		unsigned long dsp_flags;
 
-			buf_node->frame.len = pkt_len - DSP_FRAME_HDR_LEN;
+		/* Copy up-link packet into out_queue. */
+		spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
 
-			memcpy(&buf_node->frame.voc_pkt[0],
-			       voc_pkt,
-			       buf_node->frame.len);
+		if (!list_empty(&audio->free_out_queue)) {
+			buf_node = list_first_entry(&audio->free_out_queue,
+						    struct audio_mvs_buf_node,
+						    list);
+			list_del(&buf_node->list);
 
-			list_add_tail(&buf_node->list, &audio->out_queue);
-			break;
-		}
-
-		case MVS_MODE_G729A: {
-			/* G729 frames are 10ms each, but the DSP works with
-			 * 20ms frames and sends two 10ms frames per buffer.
-			 * Extract the two frames and put them in separate
-			 * buffers.
-			 */
-			/* Remove the first DSP frame info header.
-			 * Header format:
-			 * Bits 0-1: Frame type
-			 */
-			buf_node->frame.header.frame_type = (*voc_pkt) & 0x03;
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
-
-			/* There are two frames in the buffer. Length of the
-			 * first frame:
-			 */
-			buf_node->frame.len = (pkt_len -
-					       2 * DSP_FRAME_HDR_LEN) / 2;
-
-			memcpy(&buf_node->frame.voc_pkt[0],
-			       voc_pkt,
-			       buf_node->frame.len);
-			voc_pkt = voc_pkt + buf_node->frame.len;
-
-			list_add_tail(&buf_node->list, &audio->out_queue);
-
-			/* Get another buffer from the free Q and fill in the
-			 * second frame.
-			 */
-			if (!list_empty(&audio->free_out_queue)) {
-				buf_node =
-					list_first_entry(&audio->free_out_queue,
-						      struct audio_mvs_buf_node,
-						      list);
-				list_del(&buf_node->list);
-
-				/* Remove the second DSP frame info header.
-				 * Header format:
-				 * Bits 0-1: Frame type
+			switch (audio->mvs_mode) {
+			case MVS_MODE_AMR:
+			case MVS_MODE_AMR_WB: {
+				/* Remove the DSP frame info header. Header format:
+				 * Bits 0-3: Frame rate
+				 * Bits 4-7: Frame type
 				 */
 				buf_node->frame.header.frame_type =
-							(*voc_pkt) & 0x03;
+							((*voc_pkt) & 0xF0) >> 4;
 				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
-				/* There are two frames in the buffer. Length
-				 * of the first frame:
-				 */
-				buf_node->frame.len = (pkt_len -
-						     2 * DSP_FRAME_HDR_LEN) / 2;
+				buf_node->frame.len = pkt_len - DSP_FRAME_HDR_LEN;
 
 				memcpy(&buf_node->frame.voc_pkt[0],
 				       voc_pkt,
 				       buf_node->frame.len);
 
-				list_add_tail(&buf_node->list,
-					      &audio->out_queue);
-
-			} else {
-				/* Drop the second frame. */
-				pr_err("%s: UL data dropped, read is slow\n",
-				       __func__);
+				list_add_tail(&buf_node->list, &audio->out_queue);
+				break;
 			}
 
-			break;
-		}
+			case MVS_MODE_IS127: {
+				buf_node->frame.header.packet_rate = (*voc_pkt) & 0x0F;
+				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
-		case MVS_MODE_G711:
-		case MVS_MODE_G711A: {
-			/* G711 frames are 10ms each, but the DSP works with
-			 * 20ms frames and sends two 10ms frames per buffer.
-			 * Extract the two frames and put them in separate
-			 * buffers.
-			 */
-			/* Remove the first DSP frame info header.
-			 * Header format: G711A
-			 * Bits 0-1: Frame type
-			 * Bits 2-3: Frame rate
-			 *
-			 * Header format: G711
-			 * Bits 2-3: Frame rate
-			 */
-			if (audio->mvs_mode == MVS_MODE_G711A)
-				buf_node->frame.header.frame_type =
-							(*voc_pkt) & 0x03;
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+				buf_node->frame.len = pkt_len - DSP_FRAME_HDR_LEN;
 
-			/* There are two frames in the buffer. Length of the
-			 * first frame:
-			 */
-			buf_node->frame.len = (pkt_len -
-					       2 * DSP_FRAME_HDR_LEN) / 2;
+				memcpy(&buf_node->frame.voc_pkt[0],
+				       voc_pkt,
+				       buf_node->frame.len);
 
-			memcpy(&buf_node->frame.voc_pkt[0],
-			       voc_pkt,
-			       buf_node->frame.len);
-			voc_pkt = voc_pkt + buf_node->frame.len;
+				list_add_tail(&buf_node->list, &audio->out_queue);
+				break;
+			}
 
-			list_add_tail(&buf_node->list, &audio->out_queue);
-
-			/* Get another buffer from the free Q and fill in the
-			 * second frame.
-			 */
-			if (!list_empty(&audio->free_out_queue)) {
-				buf_node =
-					list_first_entry(&audio->free_out_queue,
-						      struct audio_mvs_buf_node,
-						      list);
-				list_del(&buf_node->list);
-
-				/* Remove the second DSP frame info header.
+			case MVS_MODE_G729A: {
+				/* G729 frames are 10ms each, but the DSP works with
+				 * 20ms frames and sends two 10ms frames per buffer.
+				 * Extract the two frames and put them in separate
+				 * buffers.
+				 */
+				/* Remove the first DSP frame info header.
 				 * Header format:
 				 * Bits 0-1: Frame type
+				 */
+				buf_node->frame.header.frame_type = (*voc_pkt) & 0x03;
+				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+
+				/* There are two frames in the buffer. Length of the
+				 * first frame:
+				 */
+				buf_node->frame.len = (pkt_len -
+						       2 * DSP_FRAME_HDR_LEN) / 2;
+
+				memcpy(&buf_node->frame.voc_pkt[0],
+				       voc_pkt,
+				       buf_node->frame.len);
+				voc_pkt = voc_pkt + buf_node->frame.len;
+
+				list_add_tail(&buf_node->list, &audio->out_queue);
+
+				/* Get another buffer from the free Q and fill in the
+				 * second frame.
+				 */
+				if (!list_empty(&audio->free_out_queue)) {
+					buf_node =
+						list_first_entry(&audio->free_out_queue,
+							      struct audio_mvs_buf_node,
+							      list);
+					list_del(&buf_node->list);
+
+					/* Remove the second DSP frame info header.
+					 * Header format:
+					 * Bits 0-1: Frame type
+					 */
+					buf_node->frame.header.frame_type =
+								(*voc_pkt) & 0x03;
+					voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+
+					/* There are two frames in the buffer. Length
+					 * of the first frame:
+					 */
+					buf_node->frame.len = (pkt_len -
+							     2 * DSP_FRAME_HDR_LEN) / 2;
+
+					memcpy(&buf_node->frame.voc_pkt[0],
+					       voc_pkt,
+					       buf_node->frame.len);
+
+					list_add_tail(&buf_node->list,
+						      &audio->out_queue);
+
+				} else {
+					/* Drop the second frame. */
+	/*				pr_err("%s: UL data dropped, read is slow\n",
+					       __func__);*/
+				}
+
+				break;
+			}
+
+			case MVS_MODE_G711:
+			case MVS_MODE_G711A: {
+				/* G711 frames are 10ms each, but the DSP works with
+				 * 20ms frames and sends two 10ms frames per buffer.
+				 * Extract the two frames and put them in separate
+				 * buffers.
+				 */
+				/* Remove the first DSP frame info header.
+				 * Header format: G711A
+				 * Bits 0-1: Frame type
+				 * Bits 2-3: Frame rate
+				 *
+				 * Header format: G711
 				 * Bits 2-3: Frame rate
 				 */
 				if (audio->mvs_mode == MVS_MODE_G711A)
 					buf_node->frame.header.frame_type =
-							(*voc_pkt) & 0x03;
+								(*voc_pkt) & 0x03;
 				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
-				/* There are two frames in the buffer. Length
-				 * of the second frame:
+				/* There are two frames in the buffer. Length of the
+				 * first frame:
 				 */
 				buf_node->frame.len = (pkt_len -
-						     2 * DSP_FRAME_HDR_LEN) / 2;
+						       2 * DSP_FRAME_HDR_LEN) / 2;
+
+				memcpy(&buf_node->frame.voc_pkt[0],
+				       voc_pkt,
+				       buf_node->frame.len);
+				voc_pkt = voc_pkt + buf_node->frame.len;
+
+				list_add_tail(&buf_node->list, &audio->out_queue);
+
+				/* Get another buffer from the free Q and fill in the
+				 * second frame.
+				 */
+				if (!list_empty(&audio->free_out_queue)) {
+					buf_node =
+						list_first_entry(&audio->free_out_queue,
+							      struct audio_mvs_buf_node,
+							      list);
+					list_del(&buf_node->list);
+
+					/* Remove the second DSP frame info header.
+					 * Header format:
+					 * Bits 0-1: Frame type
+					 * Bits 2-3: Frame rate
+					 */
+					if (audio->mvs_mode == MVS_MODE_G711A)
+						buf_node->frame.header.frame_type =
+								(*voc_pkt) & 0x03;
+					voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+
+					/* There are two frames in the buffer. Length
+					 * of the second frame:
+					 */
+					buf_node->frame.len = (pkt_len -
+							     2 * DSP_FRAME_HDR_LEN) / 2;
+
+					memcpy(&buf_node->frame.voc_pkt[0],
+					       voc_pkt,
+					       buf_node->frame.len);
+
+					list_add_tail(&buf_node->list,
+						      &audio->out_queue);
+				} else {
+					/* Drop the second frame. */
+	/*				pr_err("%s: UL data dropped, read is slow\n",
+					       __func__);*/
+				}
+				break;
+			}
+
+			case MVS_MODE_IS733:
+			case MVS_MODE_4GV_NB:
+			case MVS_MODE_4GV_WB: {
+				/* Remove the DSP frame info header.
+				 * Header format:
+				 * Bits 0-3: frame rate
+				 */
+				buf_node->frame.header.packet_rate = (*voc_pkt) & 0x0F;
+				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+				buf_node->frame.len = pkt_len - DSP_FRAME_HDR_LEN;
+
+				memcpy(&buf_node->frame.voc_pkt[0],
+					voc_pkt,
+					buf_node->frame.len);
+
+				list_add_tail(&buf_node->list, &audio->out_queue);
+				break;
+			}
+
+			case MVS_MODE_EFR:
+			case MVS_MODE_FR:
+			case MVS_MODE_HR: {
+				/*
+				 * Remove the DSP frame info header
+				 * Header Format
+				 * Bit 0: bfi unused for uplink
+				 * Bit 1-2: sid applies to both uplink and downlink
+				 * Bit 3: taf unused for uplink
+				 * MVS_MODE_HR
+				 * Bit 4: ufi unused for uplink
+				 */
+				buf_node->frame.header.gsm_frame_type.sid =
+							((*voc_pkt) & 0x06) >> 1;
+				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+				buf_node->frame.len = pkt_len - DSP_FRAME_HDR_LEN;
+
+				memcpy(&buf_node->frame.voc_pkt[0],
+				voc_pkt,
+				buf_node->frame.len);
+
+				list_add_tail(&buf_node->list, &audio->out_queue);
+				break;
+			}
+
+			default: {
+				buf_node->frame.header.frame_type = 0;
+
+				buf_node->frame.len = pkt_len;
 
 				memcpy(&buf_node->frame.voc_pkt[0],
 				       voc_pkt,
 				       buf_node->frame.len);
 
-				list_add_tail(&buf_node->list,
-					      &audio->out_queue);
-			} else {
-				/* Drop the second frame. */
-				pr_err("%s: UL data dropped, read is slow\n",
-				       __func__);
+				list_add_tail(&buf_node->list, &audio->out_queue);
 			}
-			break;
+			}
+		} else {
+	//		pr_err("%s: UL data dropped, read is slow\n", __func__);
 		}
 
-		case MVS_MODE_IS733:
-		case MVS_MODE_4GV_NB:
-		case MVS_MODE_4GV_WB: {
-			/* Remove the DSP frame info header.
-			 * Header format:
-			 * Bits 0-3: frame rate
-			 */
-			buf_node->frame.header.packet_rate = (*voc_pkt) & 0x0F;
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
-			buf_node->frame.len = pkt_len - DSP_FRAME_HDR_LEN;
+		spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
 
-			memcpy(&buf_node->frame.voc_pkt[0],
-				voc_pkt,
-				buf_node->frame.len);
-
-			list_add_tail(&buf_node->list, &audio->out_queue);
-			break;
-		}
-
-		case MVS_MODE_EFR:
-		case MVS_MODE_FR:
-		case MVS_MODE_HR: {
-			/*
-			 * Remove the DSP frame info header
-			 * Header Format
-			 * Bit 0: bfi unused for uplink
-			 * Bit 1-2: sid applies to both uplink and downlink
-			 * Bit 3: taf unused for uplink
-			 * MVS_MODE_HR
-			 * Bit 4: ufi unused for uplink
-			 */
-			buf_node->frame.header.gsm_frame_type.sid =
-						((*voc_pkt) & 0x06) >> 1;
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
-			buf_node->frame.len = pkt_len - DSP_FRAME_HDR_LEN;
-
-			memcpy(&buf_node->frame.voc_pkt[0],
-			voc_pkt,
-			buf_node->frame.len);
-
-			list_add_tail(&buf_node->list, &audio->out_queue);
-			break;
-		}
-
-		default: {
-			buf_node->frame.header.frame_type = 0;
-
-			buf_node->frame.len = pkt_len;
-
-			memcpy(&buf_node->frame.voc_pkt[0],
-			       voc_pkt,
-			       buf_node->frame.len);
-
-			list_add_tail(&buf_node->list, &audio->out_queue);
-		}
-		}
-	} else {
-		pr_err("%s: UL data dropped, read is slow\n", __func__);
+		wake_up(&audio->out_wait);
 	}
-
-	spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
-
-	wake_up(&audio->out_wait);
+	
 }
 
 static void audio_mvs_process_dl_pkt(uint8_t *voc_pkt,
 				     uint32_t *pkt_len,
 				     void *private_data)
 {
-	struct audio_mvs_buf_node *buf_node = NULL;
-	struct audio_mvs_info_type *audio = private_data;
-	unsigned long dsp_flags;
+#if defined (CONFIG_SKY_SND_MVS_AMR) //20130712 jhsong : EF35L for VT / FMC use MVS IF(amr or pcm)
+	if((g_CallMode == MODE_VT) || (g_CallMode == MODE_VOIP)){
+		struct audio_mvs_info_type *audio = private_data;
+		unsigned long dsp_flags;
+	  
+		spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
 
-	spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
+	       if(mvs_adv_get_state()<MVS_START)      {
+	            //pr_info("%s: playback is not ready(state=%d)\n", __func__, bf.rx.state);   
+	            *pkt_len = 0;
+	            spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+	            return;
+	       }
 
-	if (!list_empty(&audio->in_queue)) {
-		uint32_t rate_type = audio_mvs_get_rate(audio->mvs_mode,
-							audio->rate_type);
-
-		buf_node = list_first_entry(&audio->in_queue,
-					    struct audio_mvs_buf_node,
-					    list);
-		list_del(&buf_node->list);
-
-		switch (audio->mvs_mode) {
-		case MVS_MODE_AMR:
-		case MVS_MODE_AMR_WB: {
-			/* Add the DSP frame info header. Header format:
-			 * Bits 0-3: Frame rate
-			 * Bits 4-7: Frame type
-			 */
-			*voc_pkt =
-			    ((buf_node->frame.header.frame_type & 0x0F) << 4) |
-			    (rate_type & 0x0F);
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
-
-			*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
-
-			memcpy(voc_pkt,
-			       &buf_node->frame.voc_pkt[0],
-			       buf_node->frame.len);
-
-			list_add_tail(&buf_node->list, &audio->free_in_queue);
-			break;
+		if(audio->mvs_mode==MVS_MODE_AMR) {
+	            audio_adv_mvs_process_amr_downlink(voc_pkt, pkt_len, private_data);
 		}
+	       else {
+	            audio_adv_mvs_process_pcm_downlink(voc_pkt, pkt_len, private_data);
+	       }
+		spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+	}else
+#elif defined (CONFIG_SKY_SND_MVS_PCM)	 //20130712 jhsong : EF33S for FMC use MVS IF (pcm)
+	if(g_CallMode == MODE_VOIP){
+		struct audio_mvs_info_type *audio = private_data;
+		unsigned long dsp_flags;
+	  
+		spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
 
-		case MVS_MODE_IS127: {
-			/* Add the DSP frame info header. Header format:
-			 * Bits 0-3: Frame rate
-			 */
-			*voc_pkt = buf_node->frame.header.packet_rate & 0x0F;
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+	       if(mvs_adv_get_state()<MVS_START)      {
+	            //pr_info("%s: playback is not ready(state=%d)\n", __func__, bf.rx.state);   
+	            *pkt_len = 0;
+	            spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+	            return;
+	       }
 
-			*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
+	       audio_adv_mvs_process_pcm_downlink(voc_pkt, pkt_len, private_data);
+		spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+	}else
+#endif
+	{
+		struct audio_mvs_buf_node *buf_node = NULL;
+		struct audio_mvs_info_type *audio = private_data;
+		unsigned long dsp_flags;
 
-			memcpy(voc_pkt,
-			       &buf_node->frame.voc_pkt[0],
-			       buf_node->frame.len);
+		spin_lock_irqsave(&audio->dsp_lock, dsp_flags);
 
-			list_add_tail(&buf_node->list, &audio->free_in_queue);
-			break;
-		}
+		if (!list_empty(&audio->in_queue)) {
+			uint32_t rate_type = audio_mvs_get_rate(audio->mvs_mode,
+								audio->rate_type);
 
-		case MVS_MODE_G729A: {
-			/* G729 frames are 10ms each but the DSP expects 20ms
-			 * worth of data, so send two 10ms frames per buffer.
-			 */
-			/* Add the first DSP frame info header. Header format:
-			 * Bits 0-1: Frame type
-			 */
-			*voc_pkt = buf_node->frame.header.frame_type & 0x03;
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+			buf_node = list_first_entry(&audio->in_queue,
+						    struct audio_mvs_buf_node,
+						    list);
+			list_del(&buf_node->list);
 
-			*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
-
-			memcpy(voc_pkt,
-			       &buf_node->frame.voc_pkt[0],
-			       buf_node->frame.len);
-			voc_pkt = voc_pkt + buf_node->frame.len;
-
-			list_add_tail(&buf_node->list, &audio->free_in_queue);
-
-			if (!list_empty(&audio->in_queue)) {
-				/* Get the second buffer. */
-				buf_node = list_first_entry(&audio->in_queue,
-						      struct audio_mvs_buf_node,
-						      list);
-				list_del(&buf_node->list);
-
-				/* Add the second DSP frame info header.
-				 * Header format:
-				 * Bits 0-1: Frame type
+			switch (audio->mvs_mode) {
+			case MVS_MODE_AMR:
+			case MVS_MODE_AMR_WB: {
+				/* Add the DSP frame info header. Header format:
+				 * Bits 0-3: Frame rate
+				 * Bits 4-7: Frame type
 				 */
-				*voc_pkt = buf_node->frame.header.frame_type
-						& 0x03;
+				*voc_pkt =
+				    ((buf_node->frame.header.frame_type & 0x0F) << 4) |
+				    (rate_type & 0x0F);
 				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
-				*pkt_len = *pkt_len +
-					buf_node->frame.len + DSP_FRAME_HDR_LEN;
+				*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
 
 				memcpy(voc_pkt,
 				       &buf_node->frame.voc_pkt[0],
 				       buf_node->frame.len);
 
-				list_add_tail(&buf_node->list,
-					      &audio->free_in_queue);
-			} else {
-				/* Only 10ms worth of data is available, signal
-				 * erasure frame.
-				 */
-				*voc_pkt = MVS_G729A_ERASURE & 0x03;
-
-				*pkt_len = *pkt_len + DSP_FRAME_HDR_LEN;
+				list_add_tail(&buf_node->list, &audio->free_in_queue);
+				break;
 			}
 
-			break;
-		}
+			case MVS_MODE_IS127: {
+				/* Add the DSP frame info header. Header format:
+				 * Bits 0-3: Frame rate
+				 */
+				*voc_pkt = buf_node->frame.header.packet_rate & 0x0F;
+				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
-		case MVS_MODE_G711:
-		case MVS_MODE_G711A: {
-			/* G711 frames are 10ms each but the DSP expects 20ms
-			 * worth of data, so send two 10ms frames per buffer.
-			 */
-			/* Add the first DSP frame info header. Header format:
-			 * Bits 0-1: Frame type
-			 * Bits 2-3: Frame rate
-			 */
-			*voc_pkt = ((rate_type & 0x0F) << 2) |
-				   (buf_node->frame.header.frame_type & 0x03);
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+				*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
 
-			*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
+				memcpy(voc_pkt,
+				       &buf_node->frame.voc_pkt[0],
+				       buf_node->frame.len);
 
-			memcpy(voc_pkt,
-			       &buf_node->frame.voc_pkt[0],
-			       buf_node->frame.len);
-			voc_pkt = voc_pkt + buf_node->frame.len;
+				list_add_tail(&buf_node->list, &audio->free_in_queue);
+				break;
+			}
 
-			list_add_tail(&buf_node->list, &audio->free_in_queue);
+			case MVS_MODE_G729A: {
+				/* G729 frames are 10ms each but the DSP expects 20ms
+				 * worth of data, so send two 10ms frames per buffer.
+				 */
+				/* Add the first DSP frame info header. Header format:
+				 * Bits 0-1: Frame type
+				 */
+				*voc_pkt = buf_node->frame.header.frame_type & 0x03;
+				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
-			if (!list_empty(&audio->in_queue)) {
-				/* Get the second buffer. */
-				buf_node = list_first_entry(&audio->in_queue,
-						      struct audio_mvs_buf_node,
-						      list);
-				list_del(&buf_node->list);
+				*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
 
-				/* Add the second DSP frame info header.
-				 * Header format:
+				memcpy(voc_pkt,
+				       &buf_node->frame.voc_pkt[0],
+				       buf_node->frame.len);
+				voc_pkt = voc_pkt + buf_node->frame.len;
+
+				list_add_tail(&buf_node->list, &audio->free_in_queue);
+
+				if (!list_empty(&audio->in_queue)) {
+					/* Get the second buffer. */
+					buf_node = list_first_entry(&audio->in_queue,
+							      struct audio_mvs_buf_node,
+							      list);
+					list_del(&buf_node->list);
+
+					/* Add the second DSP frame info header.
+					 * Header format:
+					 * Bits 0-1: Frame type
+					 */
+					*voc_pkt = buf_node->frame.header.frame_type
+							& 0x03;
+					voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+
+					*pkt_len = *pkt_len +
+						buf_node->frame.len + DSP_FRAME_HDR_LEN;
+
+					memcpy(voc_pkt,
+					       &buf_node->frame.voc_pkt[0],
+					       buf_node->frame.len);
+
+					list_add_tail(&buf_node->list,
+						      &audio->free_in_queue);
+				} else {
+					/* Only 10ms worth of data is available, signal
+					 * erasure frame.
+					 */
+					*voc_pkt = MVS_G729A_ERASURE & 0x03;
+
+					*pkt_len = *pkt_len + DSP_FRAME_HDR_LEN;
+				}
+
+				break;
+			}
+
+			case MVS_MODE_G711:
+			case MVS_MODE_G711A: {
+				/* G711 frames are 10ms each but the DSP expects 20ms
+				 * worth of data, so send two 10ms frames per buffer.
+				 */
+				/* Add the first DSP frame info header. Header format:
 				 * Bits 0-1: Frame type
 				 * Bits 2-3: Frame rate
 				 */
 				*voc_pkt = ((rate_type & 0x0F) << 2) |
-				     (buf_node->frame.header.frame_type & 0x03);
+					   (buf_node->frame.header.frame_type & 0x03);
 				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
-				*pkt_len = *pkt_len +
-					buf_node->frame.len + DSP_FRAME_HDR_LEN;
+				*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
+
+				memcpy(voc_pkt,
+				       &buf_node->frame.voc_pkt[0],
+				       buf_node->frame.len);
+				voc_pkt = voc_pkt + buf_node->frame.len;
+
+				list_add_tail(&buf_node->list, &audio->free_in_queue);
+
+				if (!list_empty(&audio->in_queue)) {
+					/* Get the second buffer. */
+					buf_node = list_first_entry(&audio->in_queue,
+							      struct audio_mvs_buf_node,
+							      list);
+					list_del(&buf_node->list);
+
+					/* Add the second DSP frame info header.
+					 * Header format:
+					 * Bits 0-1: Frame type
+					 * Bits 2-3: Frame rate
+					 */
+					*voc_pkt = ((rate_type & 0x0F) << 2) |
+					     (buf_node->frame.header.frame_type & 0x03);
+					voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+
+					*pkt_len = *pkt_len +
+						buf_node->frame.len + DSP_FRAME_HDR_LEN;
+
+					memcpy(voc_pkt,
+					       &buf_node->frame.voc_pkt[0],
+					       buf_node->frame.len);
+
+					list_add_tail(&buf_node->list,
+						      &audio->free_in_queue);
+				} else {
+					/* Only 10ms worth of data is available, signal
+					 * erasure frame.
+					 */
+					*voc_pkt = ((rate_type & 0x0F) << 2) |
+						   (MVS_G711A_ERASURE & 0x03);
+
+					*pkt_len = *pkt_len + DSP_FRAME_HDR_LEN;
+				}
+				break;
+			}
+
+			case MVS_MODE_IS733:
+			case MVS_MODE_4GV_NB:
+			case MVS_MODE_4GV_WB: {
+				/* Add the DSP frame info header. Header format:
+				 * Bits 0-3 : Frame rate
+				*/
+				*voc_pkt = buf_node->frame.header.packet_rate & 0x0F;
+				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+				*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
+
+				memcpy(voc_pkt,
+					&buf_node->frame.voc_pkt[0],
+					buf_node->frame.len);
+
+				list_add_tail(&buf_node->list, &audio->free_in_queue);
+				break;
+			}
+
+			case MVS_MODE_EFR:
+			case MVS_MODE_FR:
+			case MVS_MODE_HR: {
+				/*
+				 * Remove the DSP frame info header
+				 * Header Format
+				 * Bit 0: bfi applies only for downlink
+				 * Bit 1-2: sid applies for downlink and uplink
+				 * Bit 3: taf applies only for downlink
+				 * MVS_MODE_HR
+				 * Bit 4: ufi applies only for downlink
+				 */
+				*voc_pkt =
+					((buf_node->frame.header.gsm_frame_type.bfi
+						& 0x01) |
+					((buf_node->frame.header.gsm_frame_type.sid
+						& 0x03) << 1) |
+					((buf_node->frame.header.gsm_frame_type.taf
+						& 0x01) << 3));
+
+				if (audio->mvs_mode == MVS_MODE_HR) {
+					*voc_pkt = (*voc_pkt |
+					((buf_node->frame.header.gsm_frame_type.ufi
+					& 0x01) << 4) |
+					((0 & 0x07) << 5));
+				} else {
+					*voc_pkt = (*voc_pkt |
+					((0 & 0x0F) << 4));
+				}
+
+				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+				*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
+
+				memcpy(voc_pkt,
+					&buf_node->frame.voc_pkt[0],
+					buf_node->frame.len);
+
+				list_add_tail(&buf_node->list, &audio->free_in_queue);
+
+				break;
+			}
+
+			default: {
+				*pkt_len = buf_node->frame.len;
 
 				memcpy(voc_pkt,
 				       &buf_node->frame.voc_pkt[0],
 				       buf_node->frame.len);
 
-				list_add_tail(&buf_node->list,
-					      &audio->free_in_queue);
-			} else {
-				/* Only 10ms worth of data is available, signal
-				 * erasure frame.
-				 */
-				*voc_pkt = ((rate_type & 0x0F) << 2) |
-					   (MVS_G711A_ERASURE & 0x03);
-
-				*pkt_len = *pkt_len + DSP_FRAME_HDR_LEN;
+				list_add_tail(&buf_node->list, &audio->free_in_queue);
 			}
-			break;
-		}
-
-		case MVS_MODE_IS733:
-		case MVS_MODE_4GV_NB:
-		case MVS_MODE_4GV_WB: {
-			/* Add the DSP frame info header. Header format:
-			 * Bits 0-3 : Frame rate
-			*/
-			*voc_pkt = buf_node->frame.header.packet_rate & 0x0F;
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
-			*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
-
-			memcpy(voc_pkt,
-				&buf_node->frame.voc_pkt[0],
-				buf_node->frame.len);
-
-			list_add_tail(&buf_node->list, &audio->free_in_queue);
-			break;
-		}
-
-		case MVS_MODE_EFR:
-		case MVS_MODE_FR:
-		case MVS_MODE_HR: {
-			/*
-			 * Remove the DSP frame info header
-			 * Header Format
-			 * Bit 0: bfi applies only for downlink
-			 * Bit 1-2: sid applies for downlink and uplink
-			 * Bit 3: taf applies only for downlink
-			 * MVS_MODE_HR
-			 * Bit 4: ufi applies only for downlink
-			 */
-			*voc_pkt =
-				((buf_node->frame.header.gsm_frame_type.bfi
-					& 0x01) |
-				((buf_node->frame.header.gsm_frame_type.sid
-					& 0x03) << 1) |
-				((buf_node->frame.header.gsm_frame_type.taf
-					& 0x01) << 3));
-
-			if (audio->mvs_mode == MVS_MODE_HR) {
-				*voc_pkt = (*voc_pkt |
-				((buf_node->frame.header.gsm_frame_type.ufi
-				& 0x01) << 4) |
-				((0 & 0x07) << 5));
-			} else {
-				*voc_pkt = (*voc_pkt |
-				((0 & 0x0F) << 4));
 			}
+		} else {
+			*pkt_len = 0;
 
-			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
-			*pkt_len = buf_node->frame.len + DSP_FRAME_HDR_LEN;
-
-			memcpy(voc_pkt,
-				&buf_node->frame.voc_pkt[0],
-				buf_node->frame.len);
-
-			list_add_tail(&buf_node->list, &audio->free_in_queue);
-
-			break;
+			//pr_info("%s: No DL data available to send to MVS\n", __func__); //20130902 hdj reduce kernel log. 
 		}
 
-		default: {
-			*pkt_len = buf_node->frame.len;
-
-			memcpy(voc_pkt,
-			       &buf_node->frame.voc_pkt[0],
-			       buf_node->frame.len);
-
-			list_add_tail(&buf_node->list, &audio->free_in_queue);
-		}
-		}
-	} else {
-		*pkt_len = 0;
-
-		pr_info("%s: No DL data available to send to MVS\n", __func__);
+		spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
+		wake_up(&audio->in_wait);
 	}
-
-	spin_unlock_irqrestore(&audio->dsp_lock, dsp_flags);
-	wake_up(&audio->in_wait);
 }
-#endif // CONFIG_SKY_SND_MVS
 
 static uint32_t audio_mvs_get_media_type(uint32_t mvs_mode, uint32_t rate_type)
 {
@@ -744,8 +785,22 @@ static uint32_t audio_mvs_get_network_type(uint32_t mvs_mode)
 	case MVS_MODE_PCM:
 	case MVS_MODE_G729A:
 	case MVS_MODE_G711A:
-#ifdef CONFIG_SKY_SND_MVS //N1066 20120410 Sound Patch
+#if defined (CONFIG_SKY_SND_MVS_AMR) //20130712 jhsong : EF35L for VT / FMC use MVS IF(amr or pcm)
+	pr_err("@#@#@#%s: ....g_CallMode: %d,    mvs_if_used : %d\n",
+	       __func__,g_CallMode,mvs_if_used);
+	if((g_CallMode == MODE_VT) || (g_CallMode == MODE_VOIP)){
 		network_type = 0x00010021;//VSS_NETWORK_ID_CDMA_NB;
+	}else{
+		network_type = VSS_NETWORK_ID_VOIP_NB;
+	}
+#elif defined (CONFIG_SKY_SND_MVS_PCM)	 //20130712 jhsong : EF33S for FMC use MVS IF (pcm)
+	pr_err("@#@#@#%s: ....g_CallMode: %d,    mvs_if_used : %d\n",
+	       __func__,g_CallMode,mvs_if_used);
+	if(g_CallMode == MODE_VOIP){
+		network_type = 0x00010021;//VSS_NETWORK_ID_CDMA_NB;
+	}else{
+		network_type = VSS_NETWORK_ID_VOIP_NB;
+	}
 #else
 		network_type = VSS_NETWORK_ID_VOIP_NB;
 #endif
@@ -774,23 +829,40 @@ static int audio_mvs_start(struct audio_mvs_info_type *audio)
 
 	/* Prevent sleep. */
 	wake_lock(&audio->suspend_lock);
-	wake_lock(&audio->idle_lock);
 	pm_qos_update_request(&audio->pm_qos_req,
 			msm_cpuidle_get_deep_idle_latency());
 
 	rc = voice_set_voc_path_full(1);
 
-#ifdef CONFIG_SKY_SND_MVS //N1066 20120410 Sound Patch
-        mvs_adv_buf_init();
+#if defined (CONFIG_SKY_SND_MVS_AMR) //20130712 jhsong : EF35L for VT / FMC use MVS IF(amr or pcm)
+	if((g_CallMode == MODE_VT) || (g_CallMode == MODE_VOIP)){
+       	mvs_adv_buf_init();
+	}
+#elif defined (CONFIG_SKY_SND_MVS_PCM)	 //20130712 jhsong : EF33S for FMC use MVS IF (pcm)
+	if(g_CallMode == MODE_VOIP){
+       	mvs_adv_buf_init();
+	}
 #endif
-
+       
 	if (rc == 0) {
 		voice_register_mvs_cb(audio_mvs_process_ul_pkt,
 				      audio_mvs_process_dl_pkt,
 				      audio);
 
-#ifdef CONFIG_SKY_SND_MVS //N1066 20120410 Sound Patch
-		mvs_adv_set_state(MVS_START);
+#if defined (CONFIG_SKY_SND_MVS_AMR) //20130712 jhsong : EF35L for VT / FMC use MVS IF(amr or pcm)
+	if((g_CallMode == MODE_VT) || (g_CallMode == MODE_VOIP)){
+              mvs_adv_set_state(MVS_START);
+		mvs_if_used = 1;
+	}
+	pr_err("@#@#@#%s: ....g_CallMode: %d,    mvs_if_used : %d\n",
+	       __func__,g_CallMode,mvs_if_used);
+#elif defined (CONFIG_SKY_SND_MVS_PCM)	 //20130712 jhsong : EF33S for FMC use MVS IF (pcm)
+	if(g_CallMode == MODE_VOIP){
+              mvs_adv_set_state(MVS_START);
+		mvs_if_used = 1;
+	}
+	pr_err("@#@#@#%s: ....g_CallMode: %d,    mvs_if_used : %d\n",
+	       __func__,g_CallMode,mvs_if_used);
 #endif
 
 		voice_config_vocoder(
@@ -814,18 +886,28 @@ static int audio_mvs_stop(struct audio_mvs_info_type *audio)
 
 	pr_info("%s\n", __func__);
 
-	voice_set_voc_path_full(0);
-
+#if defined (CONFIG_SKY_SND_MVS)
+	if(mvs_if_used == 1){
+		rc = voice_set_voc_path_full(0);
+	       if(rc == 0)  
+		{
+			audio->state = AUDIO_MVS_STOPPED;
+			mvs_adv_set_state(MVS_STOP);
+		} else {
+			pr_err("%s: Error! rc=%d \n", __func__, rc);
+		}
+	}else{
+		voice_set_voc_path_full(0);
+		audio->state = AUDIO_MVS_STOPPED;
+	}
+#else
+//	voice_set_voc_path_full(0);   // jmlee set voc path , this control removed
 	audio->state = AUDIO_MVS_STOPPED;
-
-#ifdef CONFIG_SKY_SND_MVS //N1066 20120410 Sound Patch
-       mvs_adv_set_state(MVS_STOP);
 #endif
-
+       
 	/* Allow sleep. */
 	pm_qos_update_request(&audio->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 	wake_unlock(&audio->suspend_lock);
-	wake_unlock(&audio->idle_lock);
 
 	return rc;
 }
@@ -892,11 +974,17 @@ static int audio_mvs_release(struct inode *inode, struct file *file)
 	mutex_lock(&audio->lock);
 
 	if (audio->state == AUDIO_MVS_STARTED)
-#ifdef CONFIG_SKY_SND_MVS //N1066 20120410 Sound Patch
-		if(audio_mvs_stop(audio)<0) {
-                    mutex_unlock(&audio->lock);
-                    return -ENOMEM;
-              }
+#if defined (CONFIG_SKY_SND_MVS)
+	{
+		if(mvs_if_used == 1){
+			if(audio_mvs_stop(audio)<0) {
+	                    mutex_unlock(&audio->lock);
+	                    return -ENOMEM;
+	              }
+		}else{
+			audio_mvs_stop(audio);
+		}
+	}
 #else
 		audio_mvs_stop(audio);
 #endif
@@ -935,9 +1023,13 @@ static int audio_mvs_release(struct inode *inode, struct file *file)
 	audio->memory_chunk = NULL;
 
 	audio->state = AUDIO_MVS_CLOSED;
-
-#ifdef CONFIG_SKY_SND_MVS //N1066 20120410 Sound Patch
-       mvs_adv_set_state(MVS_CLOSE);
+#if defined (CONFIG_SKY_SND_MVS)
+	if(mvs_if_used == 1){
+       	mvs_adv_set_state(MVS_CLOSE);
+		mvs_if_used = 0;
+	}
+	pr_err("@#@#@#%s: ....g_CallMode: %d,    mvs_if_used : %d\n",
+	       __func__,g_CallMode,mvs_if_used);
 #endif
 
 	mutex_unlock(&audio->lock);
@@ -1186,7 +1278,17 @@ static long audio_mvs_ioctl(struct file *file,
 
 		break;
 	}
-#ifdef CONFIG_SKY_SND_MVS //N1066 20120410 Sound Patch
+
+#if 1 // jmlee set voc path
+       case AUDIO_SET_AUDIO_VOCPATH:        {
+		  pr_err("%s: IOCTL AUDIO_SET_AUDIO_VOCPATH\n", __func__);
+               voice_set_voc_path_full(0);
+               break;
+       }
+
+#endif
+
+#if defined (CONFIG_SKY_SND_MVS)
        case AUDIO_GET_CURRENT_STATUS:        {
               int mvs_state;
 		pr_info("%s: IOCTL GET_CURRENT_STATUS, (%d)\n", __func__, mvs_adv_get_state());
@@ -1210,7 +1312,22 @@ static long audio_mvs_ioctl(struct file *file,
               }
               break;
        }
+
+	case AUDIO_GET_AUDIO_STATUS:
+	{
+		pr_info("%s: IOCTL AUDIO_GET_AUDIO_STATUS, (%d)\n", __func__, audio->state);
+
+		rc = copy_to_user((void *)arg, &audio->state, sizeof(audio->state));
+		
+		if (rc == 0)
+			rc = sizeof(audio->state);
+		else
+			pr_err("%s: AUDIO_GET_AUDIO_STATUS copy failed %d\n", __func__, rc);		
+
+		break;
+	}
 #endif
+
 	default: {
 		pr_err("%s: Unknown IOCTL %d\n", __func__, cmd);
 	}
@@ -1257,9 +1374,6 @@ static int __init audio_mvs_init(void)
 	wake_lock_init(&audio_mvs_info.suspend_lock,
 		       WAKE_LOCK_SUSPEND,
 		       "audio_mvs_suspend");
-	wake_lock_init(&audio_mvs_info.idle_lock,
-		       WAKE_LOCK_IDLE,
-		       "audio_mvs_idle");
 	pm_qos_add_request(&audio_mvs_info.pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
 				PM_QOS_DEFAULT_VALUE);
 

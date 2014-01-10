@@ -76,7 +76,9 @@ msm_mipi-objs := mipi_dsi.o mipi_dsi_host.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI) += msm_mipi.o
 
 # MIPI manufacture
+obj-$(CONFIG_FB_MSM_MIPI_DSI_MAGNA) += mipi_magna.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI_SONY) += mipi_sony.o
+obj-$(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG) += mipi_samsung.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI_TOSHIBA) += mipi_toshiba.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI_NOVATEK) += mipi_novatek.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI_ORISE) += mipi_orise.o
@@ -121,6 +123,9 @@ obj-$(CONFIG_FB_MSM_MDDI_QUICKVX) += mddi_quickvx.o
 endif
 
 ifeq ($(CONFIG_FB_MSM_MIPI_PANEL_DETECT),y)
+obj-y += mipi_magna_video_wvga.o
+obj-y += mipi_sony_video_wxga.o
+obj-y += mipi_samsung_video_wxga.o
 obj-y += mipi_toshiba_video_wvga_pt.o mipi_toshiba_video_wsvga_pt.o mipi_toshiba_video_wuxga.o
 obj-y += mipi_novatek_video_qhd_pt.o mipi_novatek_cmd_qhd_pt.o
 obj-y += mipi_orise_video_720p_pt.o mipi_orise_cmd_720p_pt.o
@@ -131,7 +136,9 @@ obj-y += mipi_chimei_wxga_pt.o
 obj-y += mipi_chimei_wuxga.o
 obj-y += mipi_truly_video_wvga_pt.o
 else
+obj-$(CONFIG_FB_MSM_MIPI_MAGNA_VIDEO_WVGA) += mipi_magna_video_wvga.o
 obj-$(CONFIG_FB_MSM_MIPI_SONY_VIDEO_WXGA) += mipi_sony_video_wxga.o
+obj-$(CONFIG_FB_MSM_MIPI_SAMSUNG_VIDEO_WXGA) += mipi_samsung_video_wxga.o
 obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT) += mipi_toshiba_video_wvga_pt.o
 obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WSVGA_PT) += mipi_toshiba_video_wsvga_pt.o
 obj-$(CONFIG_FB_MSM_MIPI_TOSHIBA_VIDEO_WUXGA) += mipi_toshiba_video_wuxga.o
@@ -180,6 +187,12 @@ ccflags-y := -I$(src)/mhl
 obj-$(CONFIG_FB_MSM_HDMI_MHL_8334) += mhl-8334.o
 mhl-8334-objs  += mhl/mhl_8334.o
 mhl-8334-objs  += mhl/mhl_i2c_utils.o
+
+#Pantech MHL (Mobile High-Definition Link), kkcho
+ifeq ($(CONFIG_PANTECH_FB_MSM_MHL_SII9244),y)
+obj-y += mhl_sii9244.o
+obj-y += mhl_sii9244_driver.o
+endif
 
 obj-$(CONFIG_FB_MSM_EXTMDDI_SVGA) += mddi_ext_lcd.o
 

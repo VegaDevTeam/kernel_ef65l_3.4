@@ -35,6 +35,17 @@
 #include "mdp.h"
 #include "mdp4.h"
 
+#ifdef CONFIG_PANTECH_LCD_QCPATCH_FIX_KNOWN_BANDWIDTH_PROBLEM
+struct mdp4_overlay_perf {
+	u32 mdp_clk_rate;
+	u32 use_ov0_blt;
+	u32 use_ov1_blt;
+	u32 mdp_bw;
+};
+
+extern struct mdp4_overlay_perf perf_current;
+#endif
+
 u32 dsi_irq;
 u32 esc_byte_ratio;
 
@@ -63,7 +74,8 @@ static struct platform_driver mipi_dsi_driver = {
 
 struct device dsi_dev;
 
-#if defined(CONFIG_FB_MSM_MIPI_DSI_SONY)  
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG) || defined(CONFIG_FB_MSM_MIPI_DSI_SONY)  
+#if defined (CONFIG_PANTECH_LCD_FIX_TURNON_PANEL_ULPS)
 static void mipi_lane_ctrl_ULPS(boolean on)
 {
     if (on) {
@@ -75,14 +87,13 @@ static void mipi_lane_ctrl_ULPS(boolean on)
 	}
 }
 #endif
+#endif
 
 static int mipi_dsi_off(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct msm_fb_data_type *mfd;
 	struct msm_panel_info *pinfo;
-
-	pr_debug("Start of %s....:\n", __func__);
 
 	mfd = platform_get_drvdata(pdev);
 	pinfo = &mfd->panel_info;
@@ -124,10 +135,12 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	mdp_bus_scale_update_request(0);
 #endif
 
-#if defined(CONFIG_FB_MSM_MIPI_DSI_SONY)  
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG) || defined(CONFIG_FB_MSM_MIPI_DSI_SONY) 
+#if defined (CONFIG_PANTECH_LCD_FIX_TURNON_PANEL_ULPS)
+
 	mipi_lane_ctrl_ULPS(1);
 #endif
-
+#endif
 	spin_lock_bh(&dsi_clk_lock);
 	mipi_dsi_clk_disable();
 
@@ -148,7 +161,7 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	else
 		up(&mfd->dma->mutex);
 
-	pr_debug("End of %s ....:\n", __func__);
+	pr_debug("%s-:\n", __func__);
 
 	return ret;
 }
@@ -166,8 +179,6 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	u32 ystride, bpp, data;
 	u32 dummy_xres, dummy_yres;
 	int target_type = 0;
-
-	pr_debug("Start of %s:....\n", __func__);
 
 	mfd = platform_get_drvdata(pdev);
 	fbi = mfd->fbi;
@@ -207,10 +218,11 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	width = mfd->panel_info.xres;
 	height = mfd->panel_info.yres;
 
-#if defined(CONFIG_FB_MSM_MIPI_DSI_SONY)
+#if defined(CONFIG_FB_MSM_MIPI_DSI_SAMSUNG) || defined(CONFIG_FB_MSM_MIPI_DSI_SONY)
+#if defined (CONFIG_PANTECH_LCD_FIX_TURNON_PANEL_ULPS)
 	mipi_lane_ctrl_ULPS(0);
 #endif
-
+#endif
 	mipi  = &mfd->panel_info.mipi;
 	if (mfd->panel_info.type == MIPI_VIDEO_PANEL) {
 		dummy_xres = mfd->panel_info.lcdc.xres_pad;
@@ -336,6 +348,11 @@ static int mipi_dsi_on(struct platform_device *pdev)
 
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(2);
+
+    #ifdef CONFIG_PANTECH_LCD_QCPATCH_FIX_KNOWN_BANDWIDTH_PROBLEM
+	perf_current.mdp_bw = OVERLAY_PERF_LEVEL4;
+	perf_current.mdp_clk_rate = 0;
+    #endif
 #endif
 
 	mdp4_overlay_dsi_state_set(ST_DSI_RESUME);
@@ -345,7 +362,7 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	else
 		up(&mfd->dma->mutex);
 
-	pr_debug("End of %s....:\n", __func__);
+	pr_debug("%s-:\n", __func__);
 
 	return ret;
 }

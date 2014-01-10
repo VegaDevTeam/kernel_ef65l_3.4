@@ -59,8 +59,8 @@ static ito_table_element ito_table[] = {
 
 /* _SPT_USERDATA_T38 INSTANCE 0 */
 #define T7_IDLEACQINT			64
-#define T7_IDLEACQINT_PLUG		255
-#define T7_ACTVACQINT			255
+#define T7_IDLEACQINT_PLUG		16
+#define T7_ACTVACQINT			16
 #define T7_ACTV2IDLETO			30
 
 /* _GEN_ACQUISITIONCONFIG_T8 INSTANCE 0 */

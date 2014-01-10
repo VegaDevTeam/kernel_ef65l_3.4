@@ -3,7 +3,7 @@
 #
 menuconfig INPUT_SENSOR
 	bool "Sensors"
-	default n
+	default y
 	help
 	  Say Y here, and a list of supported sensorss will be displayed.
 	  This option doesn't affect the kernel.
@@ -12,55 +12,52 @@ menuconfig INPUT_SENSOR
 
 if INPUT_SENSOR
 
-#### EF65L ####
-if MACH_MSM8X60_EF65L
-config EF65L_SENSORS_APDS9900_SW
+config SENSORS_APDS9900
 	tristate "Avago apds9900 proximity and light sensor"
 	depends on I2C
-	default y
+	default n
 	help
 	  Say Y here if you have a APDS9900 sensor and want to enable
 	  support for the built-in sensor.
 
-config EF65L_SENSORS_MPU3050
+config SENSORS_MPU3050
 	tristate "InvenSense mpu3050 gyro sensor"
 	depends on I2C
-	default y
+	default n
 	help
 	  Say Y here if you have a MPU3050 sensor and want to enable
 	  support for the built-in sensor.
 
-config EF65L_SENSORS_MPU_DEBUG
+config SENSORS_MPU_DEBUG
 	tristate "InvenSense mpu debug enable"
-	depends on EF65L_SENSORS_MPU3050
+	depends on SENSORS_MPU3050
 	default n
 	help
 	  Say Y here if you have a yas529 sensor and want to enable
 	  support for the built-in sensor.
 
-config EF65L_SENSORS_BMA150
+config SENSORS_BMA150
 	tristate "Bocsh bma150 accelerometer sensor"
-	depends on EF65L_SENSORS_MPU3050
+	depends on SENSORS_MPU3050
 	default n
 	help
 	  Say Y here if you have a bma150 sensor and want to enable
 	  support for the built-in sensor.
 
-config EF65L_SENSORS_BMA250
+config SENSORS_BMA250
 	tristate "Bocsh bma250 accelerometer sensor"
-	depends on EF65L_SENSORS_MPU3050
-	default y
+	depends on SENSORS_MPU3050
+	default n
 	help
 	  Say Y here if you have a bma250 sensor and want to enable
-	  support for the built-in sensor.
+	  support for the built-in sensor.	  
 
-config EF65L_SENSORS_YAS530
+config SENSORS_YAS529
 	tristate "Yamaha yas529 magnetic field sensor"
-	depends on EF65L_SENSORS_MPU3050
-	default y
+	depends on SENSORS_MPU3050
+	default n
 	help
-	  Say Y here if you have a yas530 sensor and want to enable
+	  Say Y here if you have a yas529 sensor and want to enable
 	  support for the built-in sensor.
-endif
 
 endif

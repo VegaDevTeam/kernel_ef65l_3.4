@@ -50,6 +50,12 @@
 
 #define VOC_REC_NONE 0xFF
 
+#ifdef CONFIG_SKYSND_CTRL
+#define q6voice_info(fmt, arg...) do {} while (0)
+#else
+#define q6voice_info(fmt, arg...) printk(KERN_INFO "%s: " fmt "\n", __func__, ## arg)
+#endif
+
 struct common_data common;
 
 static bool is_adsp_support_cvd(void)
@@ -2446,7 +2452,7 @@ static void voice_auddev_cb_function(u32 evt_id,
 }
 EXPORT_SYMBOL(voice_auddev_cb_function);
 
-#ifdef CONFIG_SKY_SND_MVS
+#if /*defined (CONFIG_SKYSND_CTRL) ||*/ defined (CONFIG_SKY_SND_MVS)
 int voice_set_voc_path_full_reset(void) // abnormal process reset.
 {
 	int rc = 0;
@@ -2460,9 +2466,9 @@ int voice_set_voc_path_full_reset(void) // abnormal process reset.
 	mutex_unlock(&common.common_lock);
 
 	return rc;
-
 }
 #endif
+
 int voice_set_voc_path_full(uint32_t set)
 {
 	pr_info("%s: %d\n", __func__, set);
@@ -2501,6 +2507,17 @@ void voice_config_vocoder(uint32_t media_type,
 	common.mvs_info.dtx_mode = dtx_mode;
 	common.mvs_info.q_min_max_rate = q_min_max_rate;
 }
+
+#ifdef CONFIG_SKYSND_CTRL   // SUPPORT_VARIABLE_RATE
+uint32_t voice_get_config_vocoder_rate(void)
+{
+       return common.mvs_info.rate;
+}
+void voice_set_config_vocoder_rate(uint32_t rate)
+{
+	common.mvs_info.rate = rate;
+}
+#endif
 
 static int32_t modem_mvm_callback(struct apr_client_data *data, void *priv)
 {

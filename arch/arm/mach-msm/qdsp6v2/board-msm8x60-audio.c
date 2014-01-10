@@ -30,10 +30,32 @@
 
 #include "snddev_icodec.h"
 #include "snddev_ecodec.h"
+#if defined (CONFIG_MACH_MSM8X60_EF33S)
+#include "timpani_profile_8x60_ef33s.h"
+#elif defined (CONFIG_MACH_MSM8X60_EF34K)
+#include "timpani_profile_8x60_ef34k.h"
+#elif defined (CONFIG_MACH_MSM8X60_EF35L)
+#include "timpani_profile_8x60_ef35l.h"
+#elif defined (CONFIG_MACH_MSM8X60_EF39S)
+#include "timpani_profile_8x60_ef39s.h"
+#elif defined (CONFIG_MACH_MSM8X60_EF40S)
+#include "timpani_profile_8x60_ef40s.h"
+#elif defined (CONFIG_MACH_MSM8X60_EF40K)
+#include "timpani_profile_8x60_ef40k.h"
+#elif defined (CONFIG_MACH_MSM8X60_EF65L)
+#include "timpani_profile_8x60_ef65l.h"
+#else
+#include "timpani_profile_8x60.h"
+#endif
 #include "timpani_profile_8x60.h"
 #include "snddev_hdmi.h"
 #include "snddev_mi2s.h"
 #include "snddev_virtual.h"
+#ifdef CONFIG_SKYSND_USE_EXTAMP
+#include <linux/i2c-gpio.h>
+#include "sky_snd_max9879.h"
+#endif
+
 #ifdef CONFIG_SKY_SND_EXTAMP //N1066 20120410 Sound Patch
 #include <linux/i2c-gpio.h> /* elecjang 20110421 for max97001 subsystem */
 #include "sky_snd_ext_amp_max97001.h"
@@ -45,6 +67,9 @@ static void snddev_hsed_config_modify_setting(int type);
 static void snddev_hsed_config_restore_setting(void);
 #endif
 
+#ifdef CONFIG_SKYSND_CTRL
+#define AUD_DEBUG_MSG   0
+#endif
 /* GPIO_CLASS_D0_EN */
 #define SNDDEV_GPIO_CLASS_D0_EN 227
 
@@ -261,6 +286,7 @@ static void msm_snddev_disable_dmic_power(void)
 	}
 }
 
+#ifndef CONFIG_SKYSND_CTRL
 #define PM8901_MPP_3 (2) /* PM8901 MPP starts from 0 */
 
 static int config_class_d0_gpio(int enable)
@@ -327,13 +353,14 @@ static int config_class_d1_gpio(int enable)
 	}
 	return 0;
 }
+#endif
 
 static atomic_t pamp_ref_cnt;
 
 static int msm_snddev_poweramp_on(void)
 {
-	int rc;
-
+	int rc = 0;
+#ifndef CONFIG_SKYSND_CTRL
 	if (atomic_inc_return(&pamp_ref_cnt) > 1)
 		return 0;
 
@@ -349,18 +376,75 @@ static int msm_snddev_poweramp_on(void)
 		goto config_gpio_fail;
 	}
 config_gpio_fail:
+#endif
 	return rc;
 }
 
 static void msm_snddev_poweramp_off(void)
 {
+#ifndef CONFIG_SKYSND_CTRL
 	if (atomic_dec_return(&pamp_ref_cnt) == 0) {
 		pr_debug("%s: disable stereo spkr amp\n", __func__);
 		config_class_d0_gpio(0);
 		config_class_d1_gpio(0);
 		msleep(30);
 	}
+#else
+		msleep(30);
+#endif
 }
+
+#ifdef CONFIG_SKYSND_USE_EXTAMP
+int msm_snddev_poweramp_handset_on(void)
+{
+	//pr_debug("%s: msm_snddev_poweramp_handset_on\n", __func__);
+    snd_extamp_api_SetDevice(1, SND_DEVICE_HANDSET_RX);
+	return 0;
+}
+
+void msm_snddev_poweramp_handset_off(void)
+{
+	//pr_debug("%s: msm_snddev_poweramp_handset_off\n", __func__);
+       snd_extamp_api_SetDevice(0, SND_DEVICE_HANDSET_RX);
+}
+int msm_snddev_poweramp_speaker_on(void)
+{
+	//pr_debug("%s: msm_snddev_poweramp_speaker_on\n", __func__);
+    snd_extamp_api_SetDevice(1, SND_DEVICE_SPEAKER_RX);
+	return 0;
+}
+
+void msm_snddev_poweramp_speaker_off(void)
+{
+	//pr_debug("%s: msm_snddev_poweramp_speaker_off\n", __func__);
+       snd_extamp_api_SetDevice(0, SND_DEVICE_SPEAKER_RX);
+}
+
+int msm_snddev_poweramp_headset_on(void)
+{
+	//pr_debug("%s: msm_snddev_poweramp_headset_on\n", __func__);
+    snd_extamp_api_SetDevice(1, SND_DEVICE_HEADSET_RX);
+	return 0;
+}
+
+void msm_snddev_poweramp_headset_off(void)
+{
+	//pr_debug("%s: msm_snddev_poweramp_headset_off\n", __func__);
+       snd_extamp_api_SetDevice(0, SND_DEVICE_HEADSET_RX);
+}
+
+int msm_snddev_poweramp_headset_speaker_on(void)
+{
+	//pr_debug("%s: msm_snddev_poweramp_headset_speaker_on\n", __func__);
+    snd_extamp_api_SetDevice(1, SND_DEVICE_SPEAKER_HEADSET_RX);
+	return 0;
+}
+void msm_snddev_poweramp_headset_speaker_off(void)
+{
+	//pr_debug("%s: msm_snddev_poweramp_headset_speaker_off\n", __func__);
+       snd_extamp_api_SetDevice(0, SND_DEVICE_SPEAKER_HEADSET_RX);
+}
+#endif
 
 #ifdef CONFIG_SKY_SND_EXTAMP //N1066 20120410 Sound Patch /* elecjang 20110421 for max97001 subsystem */
 #ifndef CONFIG_MACH_MSM8X60_PRESTO  // jmlee 
@@ -427,19 +511,36 @@ static void msm_snddev_poweramp_voip_headset_off(void)
        snd_extamp_api_SetDevice(0, SND_SKY_DEVICE_VOIP_HEADSET_RX);
 }
 
+#ifndef CONFIG_MACH_MSM8X60_EF65L
+static int msm_snddev_poweramp_vt_speaker_on(void) //N1066 20120607 GB UI Merge
+{
+	//pr_debug("%s: msm_snddev_poweramp_speaker_on\n", __func__);
+       snd_extamp_api_SetDevice(1, SND_SKY_DEVICE_VT_SPEAKER_RX);
+	   return 0;
+}
+
+static void msm_snddev_poweramp_vt_speaker_off(void)
+{
+	//pr_debug("%s: msm_snddev_poweramp_speaker_off\n", __func__);
+       snd_extamp_api_SetDevice(0, SND_SKY_DEVICE_VT_SPEAKER_RX);
+}
 #endif
 
-#ifndef CONFIG_SKY_SND_CTRL //N1066 20120410 Sound Patch
+#endif
+
+#ifndef CONFIG_SKYSND_CTRL
+#ifndef CONFIG_SKY_SND_CTRL
 /* Regulator 8058_l10 supplies regulator 8058_ncp. */
 static struct regulator *snddev_reg_ncp;
 static struct regulator *snddev_reg_l10;
+#endif
 #endif
 
 static atomic_t preg_ref_cnt;
 
 static int msm_snddev_voltage_on(void)
 {
-#ifdef CONFIG_SKY_SND_CTRL //N1066 20120410 Sound Patch
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)
 	return 0;
 #else
 	int rc;
@@ -490,12 +591,14 @@ regulator_fail:
 	regulator_put(snddev_reg_ncp);
 	snddev_reg_ncp = NULL;
 	return rc;
-#endif /* CONFIG_SKY_SND_CTRL */ 
+#endif /*CONFIG_SKYSND_CTRL || CONFIG_SKY_SND_CTRL */        
 }
 
 static void msm_snddev_voltage_off(void)
 {
-#ifndef CONFIG_SKY_SND_CTRL //N1066 20120410 Sound Patch
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)
+// skip this function
+#else
 	int rc;
 	pr_debug("%s\n", __func__);
 
@@ -524,7 +627,7 @@ done:
 	regulator_put(snddev_reg_l10);
 
 	snddev_reg_l10 = NULL;
-#endif /* CONFIG_SKY_SND_CTRL */        
+#endif
 }
 
 static int msm_snddev_enable_amic_power(void)
@@ -557,7 +660,7 @@ static int msm_snddev_enable_amic_power(void)
 		gpio_direction_output(SNDDEV_GPIO_MIC1_ANCL_SEL, 0);
 
 	} else {
-#ifdef CONFIG_SKY_SND_CTRL //N1066 20120410 Sound Patch
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)
 		ret = pm8058_micbias_enable(OTHC_MICBIAS_0,
 				OTHC_SIGNAL_ALWAYS_ON);
 #else
@@ -581,11 +684,12 @@ static void msm_snddev_disable_amic_power(void)
 		gpio_free(SNDDEV_GPIO_MIC1_ANCL_SEL);
 		gpio_free(SNDDEV_GPIO_MIC2_ANCR_SEL);
 	} else
-#ifdef CONFIG_SKY_SND_CTRL //N1066 20120410 Sound Patch
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)
 		ret = pm8058_micbias_enable(OTHC_MICBIAS_0, OTHC_SIGNAL_OFF);
 #else
 		ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_OFF);
 #endif
+
 	if (ret)
 		pr_err("%s: Disabling amic power failed\n", __func__);
 #endif
@@ -703,7 +807,11 @@ static int msm_snddev_enable_dmic_sec_power(void)
 		return ret;
 	}
 #ifdef CONFIG_PMIC8058_OTHC
+#ifdef CONFIG_SKYSND_CTRL
+    ret = pm8058_micbias_enable(OTHC_MICBIAS_1, OTHC_SIGNAL_ALWAYS_ON);
+#else
 	ret = pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_ALWAYS_ON);
+#endif
 	if (ret) {
 		pr_err("%s: Error: Enabling micbias failed\n", __func__);
 		msm_snddev_disable_dmic_power();
@@ -718,7 +826,11 @@ static void msm_snddev_disable_dmic_sec_power(void)
 	msm_snddev_disable_dmic_power();
 
 #ifdef CONFIG_PMIC8058_OTHC
+#ifdef CONFIG_SKYSND_CTRL
+       pm8058_micbias_enable(OTHC_MICBIAS_1, OTHC_SIGNAL_OFF);
+#else
 	pm8058_micbias_enable(OTHC_MICBIAS_2, OTHC_SIGNAL_OFF);
+#endif
 #endif
 }
 
@@ -747,7 +859,7 @@ static struct snddev_icodec_data snddev_iearpiece_data = {
 	.profile = &iearpiece_profile,
 	.channel_mode = 1,
 	.default_sample_rate = 48000,
-#if defined (CONFIG_SKY_SND_EXTAMP) /* elecjang 20110421 for max97001 subsystem */
+#if defined (CONFIG_SKYSND_USE_EXTAMP) || defined (CONFIG_SKY_SND_EXTAMP)
 	.pamp_on = msm_snddev_poweramp_handset_on,
 	.pamp_off = msm_snddev_poweramp_handset_off,
 #endif	
@@ -757,7 +869,8 @@ static struct platform_device msm_iearpiece_device = {
 	.name = "snddev_icodec",
 	.dev = { .platform_data = &snddev_iearpiece_data },
 };
-#ifdef CONFIG_SKY_SND_VT_VOIP  //N1066 20120410 Sound Patch // SangwonLee 110406 DeviceSeparation
+
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_VT_VOIP)   // SangwonLee 110406 DeviceSeparation
 static struct adie_codec_action_unit voip_iearpiece_48KHz_osr256_actions[] =
 	EAR_PRI_MONO_8000_OSR_256;
 
@@ -783,7 +896,7 @@ static struct snddev_icodec_data voip_snddev_iearpiece_data = {
 	.profile = &voip_iearpiece_profile,
 	.channel_mode = 1,
 	.default_sample_rate = 48000,
-#ifdef CONFIG_SKY_SND_EXTAMP
+#if defined (CONFIG_SKYSND_USE_EXTAMP) || defined (CONFIG_SKY_SND_EXTAMP)
 	.pamp_on = msm_snddev_poweramp_handset_on,
 	.pamp_off = msm_snddev_poweramp_handset_off,
 #endif	
@@ -793,7 +906,6 @@ static struct platform_device voip_msm_iearpiece_device = {
 	.name = "snddev_icodec",
 	.dev = { .platform_data = &voip_snddev_iearpiece_data },
 };
-
 #ifndef NO_VT_SEPARATION
 static struct adie_codec_action_unit vt_iearpiece_48KHz_osr256_actions[] =
 	EAR_PRI_MONO_8000_OSR_256;
@@ -820,10 +932,10 @@ static struct snddev_icodec_data vt_snddev_iearpiece_data = {
 	.profile = &vt_iearpiece_profile,
 	.channel_mode = 1,
 	.default_sample_rate = 48000,
-#ifdef CONFIG_SKY_SND_EXTAMP
+#if defined (CONFIG_SKYSND_USE_EXTAMP) || defined (CONFIG_SKY_SND_EXTAMP)
 	.pamp_on = msm_snddev_poweramp_handset_on,
 	.pamp_off = msm_snddev_poweramp_handset_off,
-#endif
+#endif	
 };
 
 static struct platform_device vt_msm_iearpiece_device = {
@@ -831,7 +943,7 @@ static struct platform_device vt_msm_iearpiece_device = {
 	.dev = { .platform_data = &vt_snddev_iearpiece_data },
 };
 #endif
-#endif // CONFIG_SKY_SND_VT_VOIP
+#endif
 
 static struct adie_codec_action_unit imic_48KHz_osr256_actions[] =
 	AMIC_PRI_MONO_OSR_256;
@@ -850,6 +962,62 @@ static struct adie_codec_dev_profile imic_profile = {
 	.settings = imic_settings,
 	.setting_sz = ARRAY_SIZE(imic_settings),
 };
+
+#ifdef CONFIG_SKYSND_CTRL	// SangwonLee 110422
+static struct adie_codec_action_unit imic_48KHz_osr256_actions_spk[] =
+	AMIC_PRI_MONO_8000_OSR_256_SPK;
+
+static struct adie_codec_hwsetting_entry imic_settings_spk[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = imic_48KHz_osr256_actions_spk,
+		.action_sz = ARRAY_SIZE(imic_48KHz_osr256_actions_spk),
+	}
+};
+
+static struct adie_codec_dev_profile imic_profile_spk = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = imic_settings_spk,
+	.setting_sz = ARRAY_SIZE(imic_settings_spk),
+};
+
+static struct adie_codec_action_unit voip_imic_48KHz_osr256_actions_spk[] =
+	AMIC_PRI_MONO_8000_OSR_256_SPK;
+
+static struct adie_codec_hwsetting_entry voip_imic_settings_spk[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = voip_imic_48KHz_osr256_actions_spk,
+		.action_sz = ARRAY_SIZE(voip_imic_48KHz_osr256_actions_spk),
+	}
+};
+
+static struct adie_codec_dev_profile voip_imic_profile_spk = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = voip_imic_settings_spk,
+	.setting_sz = ARRAY_SIZE(voip_imic_settings_spk),
+};
+
+static struct adie_codec_action_unit vt_imic_48KHz_osr256_actions_spk[] =
+	AMIC_PRI_MONO_8000_OSR_256_SPK;
+
+static struct adie_codec_hwsetting_entry vt_imic_settings_spk[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = vt_imic_48KHz_osr256_actions_spk,
+		.action_sz = ARRAY_SIZE(vt_imic_48KHz_osr256_actions_spk),
+	}
+};
+
+static struct adie_codec_dev_profile vt_imic_profile_spk = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = vt_imic_settings_spk,
+	.setting_sz = ARRAY_SIZE(vt_imic_settings_spk),
+};
+#endif
 
 static struct snddev_icodec_data snddev_imic_data = {
 	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
@@ -883,9 +1051,15 @@ static struct platform_device msm_fluid_ispkr_mic_device = {
 	.dev = { .platform_data = &snddev_fluid_ispkr_mic_data },
 };
 
-#ifdef CONFIG_SKY_SND_VT_VOIP  //N1066 20120410 Sound Patch // SangwonLee 110406 DeviceSeparation
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_VT_VOIP)   // SangwonLee 110406 DeviceSeparation
+
+#ifdef CONFIG_SKYSND_CTRL   // SangwonLee 110406 DeviceSeparation
+static struct adie_codec_action_unit voip_imic_48KHz_osr256_actions[] =
+	AMIC_PRI_MONO_OSR_256;
+#elif defined (CONFIG_SKY_SND_VT_VOIP)
 static struct adie_codec_action_unit voip_imic_48KHz_osr256_actions[] =
 	AMIC_PRI_MONO_8000_OSR_256;
+#endif
 
 static struct adie_codec_hwsetting_entry voip_imic_settings[] = {
 	{
@@ -919,8 +1093,14 @@ static struct platform_device voip_msm_imic_device = {
 };
 
 #ifndef NO_VT_SEPARATION
+
+#ifdef CONFIG_SKYSND_CTRL   // SangwonLee 110406 DeviceSeparation
+static struct adie_codec_action_unit vt_imic_48KHz_osr256_actions[] =
+	AMIC_PRI_MONO_OSR_256;
+#elif defined (CONFIG_SKY_SND_VT_VOIP)
 static struct adie_codec_action_unit vt_imic_48KHz_osr256_actions[] =
 	AMIC_PRI_MONO_8000_OSR_256;
+#endif
 
 static struct adie_codec_hwsetting_entry vt_imic_settings[] = {
 	{
@@ -953,10 +1133,10 @@ static struct platform_device vt_msm_imic_device = {
 	.dev = { .platform_data = &vt_snddev_imic_data },
 };
 #endif
-#endif // CONFIG_SKY_SND_VT_VOIP
+#endif
 
 static struct adie_codec_action_unit headset_ab_cpls_48KHz_osr256_actions[] =
-#ifdef CONFIG_SKY_SND_CTRL //N1066 20120410 Sound Patch /* 20110429-jhpark: RX HPH CLASS AB LEGACY */
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)  //2011.03.31 ojs : H/W 구조 변경에 따라 QTR 값 변경
 	HPH_PRI_AB_LEG_STEREO; 
 #else
 	HEADSET_AB_CPLS_48000_OSR_256;
@@ -986,7 +1166,7 @@ static struct snddev_icodec_data snddev_ihs_stereo_rx_data = {
 	.default_sample_rate = 48000,
 	.voltage_on = msm_snddev_voltage_on,
 	.voltage_off = msm_snddev_voltage_off,
-#ifdef CONFIG_SKY_SND_EXTAMP //N1066 20120410 Sound Patch /* elecjang 20110421 for max97001 subsystem */
+#if defined (CONFIG_SKYSND_USE_EXTAMP) || defined (CONFIG_SKY_SND_EXTAMP)
 	.pamp_on = msm_snddev_poweramp_headset_on,
 	.pamp_off = msm_snddev_poweramp_headset_off,
 #endif
@@ -997,9 +1177,9 @@ static struct platform_device msm_headset_stereo_device = {
 	.dev = { .platform_data = &snddev_ihs_stereo_rx_data },
 };
 
-#ifdef CONFIG_SKY_SND_VT_VOIP  //N1066 20120410 Sound Patch // SangwonLee 110406 DeviceSeparation
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_VT_VOIP)   // SangwonLee 110406 DeviceSeparation
 static struct adie_codec_action_unit voip_headset_ab_cpls_48KHz_osr256_actions[] =
-#ifdef CONFIG_SKY_SND_CTRL
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)  //2011.03.31 ojs : H/W 구조 변경에 따라 QTR 값 변경
 	VOIP_HPH_PRI_AB_LEG_STEREO; 
 #else
 	HEADSET_AB_CPLS_48000_OSR_256;
@@ -1029,7 +1209,10 @@ static struct snddev_icodec_data voip_snddev_ihs_stereo_rx_data = {
 	.default_sample_rate = 48000,
 	.voltage_on = msm_snddev_voltage_on,
 	.voltage_off = msm_snddev_voltage_off,
-#ifdef CONFIG_SKY_SND_EXTAMP
+#ifdef CONFIG_SKYSND_USE_EXTAMP
+	.pamp_on = msm_snddev_poweramp_headset_on,
+	.pamp_off = msm_snddev_poweramp_headset_off,
+#elif defined (CONFIG_SKY_SND_EXTAMP)
 	.pamp_on = msm_snddev_poweramp_voip_headset_on,
 	.pamp_off = msm_snddev_poweramp_voip_headset_off,
 #endif
@@ -1042,7 +1225,7 @@ static struct platform_device voip_msm_headset_stereo_device = {
 
 #ifndef NO_VT_SEPARATION
 static struct adie_codec_action_unit vt_headset_ab_cpls_48KHz_osr256_actions[] =
-#ifdef CONFIG_SKY_SND_CTRL 
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)  //2011.03.31 ojs : H/W 구조 변경에 따라 QTR 값 변경
 	VT_HPH_PRI_AB_LEG_STEREO; 
 #else
 	HEADSET_AB_CPLS_48000_OSR_256;
@@ -1072,7 +1255,7 @@ static struct snddev_icodec_data vt_snddev_ihs_stereo_rx_data = {
 	.default_sample_rate = 48000,
 	.voltage_on = msm_snddev_voltage_on,
 	.voltage_off = msm_snddev_voltage_off,
-#ifdef CONFIG_SKY_SND_EXTAMP
+#if defined (CONFIG_SKYSND_USE_EXTAMP) || defined (CONFIG_SKY_SND_EXTAMP)
 	.pamp_on = msm_snddev_poweramp_headset_on,
 	.pamp_off = msm_snddev_poweramp_headset_off,
 #endif
@@ -1083,7 +1266,7 @@ static struct platform_device vt_msm_headset_stereo_device = {
 	.dev = { .platform_data = &vt_snddev_ihs_stereo_rx_data },
 };
 #endif
-#endif // CONFIG_SKY_SND_VT_VOIP
+#endif
 
 static struct adie_codec_action_unit headset_anc_48KHz_osr256_actions[] =
 	ANC_HEADSET_CPLS_AMIC1_AUXL_RX1_48000_OSR_256;
@@ -1150,7 +1333,7 @@ static struct snddev_icodec_data snddev_ispkr_stereo_data = {
 	.channel_mode = 2,
 #endif
 	.default_sample_rate = 48000,
-#ifdef CONFIG_SKY_SND_EXTAMP //N1066 20120410 Sound Patch /* elecjang 20110421 for max97001 subsystem */
+#if defined (CONFIG_SKYSND_USE_EXTAMP) || defined (CONFIG_SKY_SND_EXTAMP)
        .pamp_on = msm_snddev_poweramp_speaker_on,
        .pamp_off = msm_snddev_poweramp_speaker_off,
 #else
@@ -1164,7 +1347,7 @@ static struct platform_device msm_ispkr_stereo_device = {
 	.dev = { .platform_data = &snddev_ispkr_stereo_data },
 };
 
-#ifdef CONFIG_SKY_SND_VT_VOIP //N1066 20120410 Sound Patch  // SangwonLee 110406 DeviceSeparation
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_VT_VOIP)   // SangwonLee 110406 DeviceSeparation
 static struct adie_codec_action_unit voip_ispkr_stereo_48KHz_osr256_actions[] =
 	SPEAKER_PRI_STEREO_48000_OSR_256;
 
@@ -1194,7 +1377,7 @@ static struct snddev_icodec_data voip_snddev_ispkr_stereo_data = {
 	.channel_mode = 2,
 #endif
 	.default_sample_rate = 48000,
-#ifdef CONFIG_SKY_SND_EXTAMP
+#if defined (CONFIG_SKYSND_USE_EXTAMP) || defined (CONFIG_SKY_SND_EXTAMP)
        .pamp_on = msm_snddev_poweramp_speaker_on,
        .pamp_off = msm_snddev_poweramp_speaker_off,
 #else
@@ -1238,9 +1421,17 @@ static struct snddev_icodec_data vt_snddev_ispkr_stereo_data = {
 	.channel_mode = 2,
 #endif
 	.default_sample_rate = 48000,
-#ifdef CONFIG_SKY_SND_EXTAMP
+#ifdef CONFIG_SKYSND_USE_EXTAMP
        .pamp_on = msm_snddev_poweramp_speaker_on,
        .pamp_off = msm_snddev_poweramp_speaker_off,
+#elif defined (CONFIG_SKY_SND_EXTAMP)
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+       .pamp_on = msm_snddev_poweramp_speaker_on,
+       .pamp_off = msm_snddev_poweramp_speaker_off,
+#else
+       .pamp_on = msm_snddev_poweramp_vt_speaker_on,
+       .pamp_off = msm_snddev_poweramp_vt_speaker_off,
+#endif
 #else
 	.pamp_on = msm_snddev_poweramp_on,
 	.pamp_off = msm_snddev_poweramp_off,
@@ -1252,7 +1443,7 @@ static struct platform_device vt_msm_ispkr_stereo_device = {
 	.dev = { .platform_data = &vt_snddev_ispkr_stereo_data },
 };
 #endif
-#endif // CONFIG_SKY_SND_VT_VOIP
+#endif
 
 static struct adie_codec_action_unit idmic_mono_48KHz_osr256_actions[] =
 	DMIC1_PRI_MONO_OSR_256;
@@ -1275,7 +1466,10 @@ static struct adie_codec_dev_profile idmic_mono_profile = {
 static struct snddev_icodec_data snddev_ispkr_mic_data = {
 	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
 	.name = "speaker_mono_tx",
-#ifdef CONFIG_SKY_SND_CTRL //N1066 20120410 Sound Patch
+#ifdef CONFIG_SKYSND_CTRL
+	.copp_id = 1,
+	.profile = &imic_profile_spk,
+#elif defined (CONFIG_SKY_SND_CTRL)
 	.copp_id = 1,
 	.profile = &imic_profile,
 #else
@@ -1284,7 +1478,7 @@ static struct snddev_icodec_data snddev_ispkr_mic_data = {
 #endif
 	.channel_mode = 1,
 	.default_sample_rate = 48000,
-#ifdef CONFIG_SKY_SND_CTRL	//N1066 20120410 Sound Patch
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)
 	.pamp_on = msm_snddev_enable_amic_power,
 	.pamp_off = msm_snddev_disable_amic_power,
 #else
@@ -1297,6 +1491,8 @@ static struct platform_device msm_ispkr_mic_device = {
 	.name = "snddev_icodec",
 	.dev = { .platform_data = &snddev_ispkr_mic_data },
 };
+
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_VT_VOIP)   // SangwonLee 110406 DeviceSeparation
 
 #ifdef CONFIG_SKY_SND_VT_VOIP //N1066 20120410 Sound Patch  // SangwonLee 110406 DeviceSeparation
 static struct adie_codec_action_unit voip_imic_48KHz_osr256_actions_spk[] =
@@ -1316,7 +1512,7 @@ static struct adie_codec_dev_profile voip_imic_profile_spk = {
 	.settings = voip_imic_settings_spk,
 	.setting_sz = ARRAY_SIZE(voip_imic_settings_spk),
 };
-
+#endif
 static struct snddev_icodec_data voip_snddev_ispkr_mic_data = {
 	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
 	.name = "voip_speaker_mono_tx",
@@ -1324,7 +1520,7 @@ static struct snddev_icodec_data voip_snddev_ispkr_mic_data = {
 	.profile = &voip_imic_profile_spk,
 	.channel_mode = 1,
 	.default_sample_rate = 48000,
-#ifdef CONFIG_SKY_SND_CTRL	
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)
 	.pamp_on = msm_snddev_enable_amic_power,
 	.pamp_off = msm_snddev_disable_amic_power,
 #else
@@ -1339,6 +1535,8 @@ static struct platform_device voip_msm_ispkr_mic_device = {
 };
 
 #ifndef NO_VT_SEPARATION
+
+#ifdef CONFIG_SKY_SND_VT_VOIP //N1066 20120410 Sound Patch  // SangwonLee 110406 DeviceSeparation
 static struct adie_codec_action_unit vt_imic_48KHz_osr256_actions_spk[] =
 	AMIC_PRI_MONO_8000_OSR_256_SPK;
 
@@ -1356,6 +1554,8 @@ static struct adie_codec_dev_profile vt_imic_profile_spk = {
 	.settings = vt_imic_settings_spk,
 	.setting_sz = ARRAY_SIZE(vt_imic_settings_spk),
 };
+#endif
+
 static struct snddev_icodec_data vt_snddev_ispkr_mic_data = {
 	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
 	.name = "vt_speaker_mono_tx",
@@ -1363,7 +1563,7 @@ static struct snddev_icodec_data vt_snddev_ispkr_mic_data = {
 	.profile = &vt_imic_profile_spk,
 	.channel_mode = 1,
 	.default_sample_rate = 48000,
-#ifdef CONFIG_SKY_SND_CTRL	
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_CTRL)
 	.pamp_on = msm_snddev_enable_amic_power,
 	.pamp_off = msm_snddev_disable_amic_power,
 #else
@@ -1377,7 +1577,70 @@ static struct platform_device vt_msm_ispkr_mic_device = {
 	.dev = { .platform_data = &vt_snddev_ispkr_mic_data },
 };
 #endif
-#endif // CONFIG_SKY_SND_VT_VOIP
+
+
+#ifdef CONFIG_SKYSND_CTRL  //2011.04.27 ojs : separate call & normal
+#if 0 //def CONFIG_SKYSND_CTRL  //2011.04.27 ojs : separate call & normal
+static struct snddev_icodec_data normal_snddev_ispkr_stereo_data = {
+	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
+	.name = "normal_speaker_stereo_rx",
+	.copp_id = 0,
+	.profile = &ispkr_stereo_profile,
+	.channel_mode = 2,
+	.default_sample_rate = 48000,
+#ifdef CONFIG_SKYSND_USE_EXTAMP
+       .pamp_on = msm_snddev_poweramp_speaker_on,
+       .pamp_off = msm_snddev_poweramp_speaker_off,
+#else
+	.pamp_on = msm_snddev_poweramp_on,
+	.pamp_off = msm_snddev_poweramp_off,
+#endif
+};
+
+static struct platform_device normal_msm_ispkr_stereo_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &normal_snddev_ispkr_stereo_data },
+};
+#endif
+
+static struct adie_codec_action_unit normal_imic_48KHz_osr256_actions_spk[] =
+	AMIC_PRI_MONO_8000_OSR_256_SPK_NORMAL;
+	
+static struct adie_codec_hwsetting_entry normal_imic_settings_spk[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = normal_imic_48KHz_osr256_actions_spk,
+		.action_sz = ARRAY_SIZE(normal_imic_48KHz_osr256_actions_spk),
+	}
+};
+static struct adie_codec_dev_profile normal_imic_profile_spk = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = normal_imic_settings_spk,
+	.setting_sz = ARRAY_SIZE(normal_imic_settings_spk),
+};
+
+static struct snddev_icodec_data normal_snddev_ispkr_mic_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "normal_speaker_mono_tx",
+	.copp_id = 1,
+	.profile = &normal_imic_profile_spk,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+#ifdef CONFIG_SKYSND_CTRL	
+	.pamp_on = msm_snddev_enable_amic_power,
+	.pamp_off = msm_snddev_disable_amic_power,
+#else
+	.pamp_on = msm_snddev_enable_dmic_power,
+	.pamp_off = msm_snddev_disable_dmic_power,
+#endif	
+};
+static struct platform_device normal_msm_ispkr_mic_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &normal_snddev_ispkr_mic_data },
+};
+#endif
+#endif
 
 static struct adie_codec_action_unit iearpiece_ffa_48KHz_osr256_actions[] =
 	EAR_PRI_MONO_8000_OSR_256;
@@ -1708,7 +1971,7 @@ static struct platform_device msm_headset_mic_device = {
 	.dev = { .platform_data = &snddev_headset_mic_data },
 };
 
-#ifdef CONFIG_SKY_SND_VT_VOIP //N1066 20120410 Sound Patch  // SangwonLee 110406 DeviceSeparation
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_VT_VOIP)   // SangwonLee 110406 DeviceSeparation
 static struct adie_codec_action_unit voip_iheadset_mic_tx_osr256_actions[] =
 	HEADSET_AMIC2_TX_MONO_PRI_OSR_256;
 
@@ -1774,7 +2037,186 @@ static struct platform_device vt_msm_headset_mic_device = {
 	.dev = { .platform_data = &vt_snddev_headset_mic_data },
 };
 #endif
-#endif // CONFIG_SKY_SND_VT_VOIP
+#endif
+
+#ifdef  CONFIG_SKY_SND_VRMODE // 20130708 Jimmy, Separate VoiceRecognition path for Fusion2
+static struct adie_codec_action_unit vr_handset_imic_48KHz_osr256_actions[] =
+	AMIC_PRI_MONO_OSR_256;
+
+static struct adie_codec_hwsetting_entry vr_handset_imic_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = vr_handset_imic_48KHz_osr256_actions,
+		.action_sz = ARRAY_SIZE(vr_handset_imic_48KHz_osr256_actions),
+	}
+};
+
+static struct adie_codec_dev_profile vr_handset_imic_profile = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = vr_handset_imic_settings,
+	.setting_sz = ARRAY_SIZE(vr_handset_imic_settings),
+};
+
+static struct snddev_icodec_data vr_handset_snddev_ispkr_mic_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "vr_handset_tx",
+	.copp_id = 1,
+	.profile = &vr_handset_imic_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_enable_amic_power,
+	.pamp_off = msm_snddev_disable_amic_power,
+};
+
+static struct platform_device vr_handset_msm_ispkr_mic_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &vr_handset_snddev_ispkr_mic_data },
+};
+#endif
+
+#ifdef  CONFIG_SKYSND_VRMODE // 20130708 Jimmy, Separate VoiceRecognition path for Racer1
+static struct adie_codec_action_unit vr_handset_imic_48KHz_osr256_actions_spk[] =
+	AMIC_PRI_MONO_8000_OSR_256_SPK_NORMAL;
+	
+static struct adie_codec_hwsetting_entry vr_handset_imic_settings_spk[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = vr_handset_imic_48KHz_osr256_actions_spk,
+		.action_sz = ARRAY_SIZE(vr_handset_imic_48KHz_osr256_actions_spk),
+	}
+};
+static struct adie_codec_dev_profile vr_handset_imic_profile_spk = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = vr_handset_imic_settings_spk,
+	.setting_sz = ARRAY_SIZE(vr_handset_imic_settings_spk),
+};
+
+static struct snddev_icodec_data vr_handset_snddev_ispkr_mic_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "vr_handset_tx",
+	.copp_id = 1,
+	.profile = &vr_handset_imic_profile_spk,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_enable_amic_power,
+	.pamp_off = msm_snddev_disable_amic_power,
+};
+static struct platform_device vr_handset_msm_ispkr_mic_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &vr_handset_snddev_ispkr_mic_data },
+};
+#endif
+
+#if defined (CONFIG_SKYSND_VRMODE) || (CONFIG_SKY_SND_VRMODE)
+static struct adie_codec_action_unit vr_headset_iheadset_mic_tx_osr256_actions[] =
+	HEADSET_AMIC2_TX_MONO_PRI_OSR_256;
+
+static struct adie_codec_hwsetting_entry vr_headset_iheadset_mic_tx_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = vr_headset_iheadset_mic_tx_osr256_actions,
+		.action_sz = ARRAY_SIZE(vr_headset_iheadset_mic_tx_osr256_actions),
+	}
+};
+
+static struct adie_codec_dev_profile vr_headset_iheadset_mic_profile = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = vr_headset_iheadset_mic_tx_settings,
+	.setting_sz = ARRAY_SIZE(vr_headset_iheadset_mic_tx_settings),
+};
+
+static struct snddev_icodec_data vr_headset_snddev_headset_mic_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "vr_headset_tx",
+	.copp_id = PRIMARY_I2S_TX,
+	.profile = &vr_headset_iheadset_mic_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+};
+
+static struct platform_device vr_headset_msm_headset_mic_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &vr_headset_snddev_headset_mic_data },
+};
+#endif
+
+#ifdef CONFIG_SKY_SND_CTRL //CONFIG_SKYSND_CTRL_MDM
+#ifndef CONFIG_MACH_MSM8X60_EF65L
+#ifndef CONFIG_MACH_MSM8X60_EF40K
+static struct adie_codec_action_unit mdm_handset_mic_48KHz_osr256_actions[] =
+	MDM_HANDSET_TX_48000_OSR_256;
+
+static struct adie_codec_hwsetting_entry mdm_handset_mic_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = mdm_handset_mic_48KHz_osr256_actions,
+		.action_sz = ARRAY_SIZE(mdm_handset_mic_48KHz_osr256_actions),
+	}
+};
+
+static struct adie_codec_dev_profile mdm_handset_mic_profile = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = mdm_handset_mic_settings,
+	.setting_sz = ARRAY_SIZE(mdm_handset_mic_settings),
+};
+
+static struct snddev_icodec_data snddev_mdm_handset_mic_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "mdm_handset_tx",
+	.copp_id = 1,
+	.profile = &mdm_handset_mic_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_enable_amic_power,
+	.pamp_off = msm_snddev_disable_amic_power,
+};
+
+static struct platform_device msm_mdm_handset_tx_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &snddev_mdm_handset_mic_data },
+};
+
+///////////////////////////////////////
+
+static struct adie_codec_action_unit ihs_mdm_mono_tx_48KHz_osr256_actions[] =
+	MDM_HEADSET_MONO_TX_48000_OSR_256;
+
+static struct adie_codec_hwsetting_entry ihs_mdm_mono_tx_settings[] = {
+	{
+		.freq_plan = 48000,
+		.osr = 256,
+		.actions = ihs_mdm_mono_tx_48KHz_osr256_actions,
+		.action_sz = ARRAY_SIZE(ihs_mdm_mono_tx_48KHz_osr256_actions),
+	}
+};
+
+static struct adie_codec_dev_profile ihs_mdm_mono_tx_profile = {
+	.path_type = ADIE_CODEC_TX,
+	.settings = ihs_mdm_mono_tx_settings,
+	.setting_sz = ARRAY_SIZE(ihs_mdm_mono_tx_settings),
+};
+
+static struct snddev_icodec_data snddev_mdm_ihs_mono_tx_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "mdm_headset_tx",
+	.copp_id = PRIMARY_I2S_TX,
+	.profile = &ihs_mdm_mono_tx_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+};
+
+static struct platform_device msm_mdm_headset_tx_device = {
+	.name = "snddev_icodec",
+	.dev = { .platform_data = &snddev_mdm_ihs_mono_tx_data },
+};
+#endif
+#endif
+#endif
+
 static struct adie_codec_action_unit
 	ihs_stereo_speaker_stereo_rx_48KHz_osr256_actions[] =
 	SPEAKER_HPH_AB_CPL_PRI_STEREO_48000_OSR_256;
@@ -1803,7 +2245,7 @@ static struct snddev_icodec_data snddev_ihs_stereo_speaker_stereo_rx_data = {
 	.profile = &ihs_stereo_speaker_stereo_rx_profile,
 	.channel_mode = 2,
 	.default_sample_rate = 48000,
-#ifdef CONFIG_SKY_SND_EXTAMP //N1066 20120410 Sound Patch /* elecjang 20110421 for max97001 subsystem */
+#if defined (CONFIG_SKYSND_USE_EXTAMP) || defined (CONFIG_SKY_SND_EXTAMP)
 	.pamp_on = msm_snddev_poweramp_headset_speaker_on,
 	.pamp_off = msm_snddev_poweramp_headset_speaker_off,
 	.voltage_on = msm_snddev_voltage_on,
@@ -1847,6 +2289,35 @@ struct platform_device msm_bt_sco_mic_device = {
 	.name = "msm_snddev_ecodec",
 	.dev = { .platform_data = &snddev_bt_sco_mic_data },
 };
+
+#ifdef CONFIG_SKY_SND_VT_BT_SCO
+/* define the value for VT_BT_SCO */
+
+static struct snddev_ecodec_data snddev_vt_bt_sco_earpiece_data = {
+	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
+	.name = "vt_bt_sco_rx",
+	.copp_id = PCM_RX,
+	.channel_mode = 1,
+};
+
+static struct snddev_ecodec_data snddev_vt_bt_sco_mic_data = {
+	.capability = (SNDDEV_CAP_TX | SNDDEV_CAP_VOICE),
+	.name = "vt_bt_sco_tx",
+	.copp_id = PCM_TX,
+	.channel_mode = 1,
+};
+
+struct platform_device vt_msm_bt_sco_earpiece_device = {
+	.name = "msm_snddev_ecodec",
+	.dev = { .platform_data = &snddev_vt_bt_sco_earpiece_data },
+};
+
+
+struct platform_device vt_msm_bt_sco_mic_device = {
+	.name = "msm_snddev_ecodec",
+	.dev = { .platform_data = &snddev_vt_bt_sco_mic_data },
+};
+#endif
 
 static struct adie_codec_action_unit itty_mono_tx_actions[] =
 	TTY_HEADSET_MONO_TX_OSR_256;
@@ -3191,7 +3662,7 @@ static struct platform_device *snd_devices_surf[] __initdata = {
 	&msm_linein_pri_device,
 	&msm_icodec_gpio_device,
 	&msm_snddev_hdmi_non_linear_pcm_rx_device,
-#ifdef CONFIG_SKY_SND_VT_VOIP   // SangwonLee 110406 DeviceSeparation
+#if defined (CONFIG_SKYSND_CTRL) || defined (CONFIG_SKY_SND_VT_VOIP)   // SangwonLee 110406 DeviceSeparation
 	&voip_msm_iearpiece_device,
 	&voip_msm_imic_device,
 	&voip_msm_headset_stereo_device,
@@ -3206,7 +3677,33 @@ static struct platform_device *snd_devices_surf[] __initdata = {
 	&vt_msm_ispkr_stereo_device,
 	&vt_msm_ispkr_mic_device,
 #endif
-#endif // CONFIG_SKY_SND_VT_VOIP	
+#ifdef CONFIG_SKYSND_CTRL  //2011.04.27 ojs : separate call & normal
+//	&normal_msm_ispkr_stereo_device,
+	&normal_msm_ispkr_mic_device,
+#endif
+#endif
+#ifdef CONFIG_SKY_SND_CTRL //CONFIG_SKYSND_CTRL_MDM
+#ifndef CONFIG_MACH_MSM8X60_EF65L
+#ifndef CONFIG_MACH_MSM8X60_EF40K
+	&msm_mdm_handset_tx_device,
+	&msm_mdm_headset_tx_device,
+#endif
+#endif
+#endif
+#ifdef CONFIG_SKY_SND_VRMODE // 20130708 Jimmy, Separate VoiceRecognition path
+       &vr_handset_msm_ispkr_mic_device,
+#endif
+#ifdef CONFIG_SKYSND_VRMODE // 20130708 Jimmy, Separate VoiceRecognition path
+       &vr_handset_msm_ispkr_mic_device,
+#endif
+#if defined (CONFIG_SKYSND_VRMODE) || (CONFIG_SKY_SND_VRMODE) // 20130708 Jimmy, Separate VoiceRecognition path
+       &vr_headset_msm_headset_mic_device,
+#endif
+#ifdef CONFIG_SKY_SND_VT_BT_SCO //20130729 hdj VT_BT_SCO
+	&vt_msm_bt_sco_earpiece_device,
+	&vt_msm_bt_sco_mic_device,
+#endif
+       
 };
 
 static struct platform_device *snd_devices_fluid[] __initdata = {
@@ -3293,7 +3790,29 @@ void __init msm_snddev_init(void)
 		ARRAY_SIZE(snd_devices_common));
 
 	/* Auto detect device base on machine info */
-	if (machine_is_msm8x60_surf() || machine_is_msm8x60_fusion()) {
+	if (machine_is_msm8x60_surf() || machine_is_msm8x60_fusion()
+#ifdef CONFIG_MACH_MSM8X60_EF33S //N1066 20120410 Sound Patch
+			|| machine_is_msm8x60_ef33s()
+#endif
+#ifdef CONFIG_MACH_MSM8X60_EF34K //N1066 20120410 Sound Patch
+			|| machine_is_msm8x60_ef34k()
+#endif
+#ifdef CONFIG_MACH_MSM8X60_EF35L //N1066 20120410 Sound Patch
+			|| machine_is_msm8x60_ef35l()
+#endif
+#ifdef CONFIG_MACH_MSM8X60_EF39S //N1066 20120410 Sound Patch
+			|| machine_is_msm8x60_ef39s()
+#endif
+#ifdef CONFIG_MACH_MSM8X60_EF40K
+			|| machine_is_msm8x60_ef40k()
+#endif
+#ifdef CONFIG_MACH_MSM8X60_EF40S
+			|| machine_is_msm8x60_ef40s()
+#endif
+#ifdef CONFIG_MACH_MSM8X60_EF65L
+			|| machine_is_msm8x60_ef65l()
+#endif
+        ) {
 		for (i = 0; i < ARRAY_SIZE(snd_devices_surf); i++)
 			snd_devices_surf[i]->id = dev_id++;
 

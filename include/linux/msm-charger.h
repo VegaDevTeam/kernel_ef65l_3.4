@@ -16,10 +16,10 @@
 #include <linux/power_supply.h>
 
 enum {
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-	CHG_TYPE_NONE,
-	CHG_TYPE_FACTORY,
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SMB137B_CHARGER)
+        CHG_TYPE_NONE,
+        CHG_TYPE_FACTORY,
+#endif
 	CHG_TYPE_USB,
 	CHG_TYPE_AC
 };
@@ -66,9 +66,10 @@ struct msm_hardware_charger {
 	void (*start_system_current) (struct msm_hardware_charger *hw_chg,
 							int chg_current);
 	void (*stop_system_current) (struct msm_hardware_charger *hw_chg);
-#if	defined(CONFIG_SKY_SMB136S_CHARGER)
+#if defined(CONFIG_MACH_MSM8X60_EF65L)
 	int (*get_chg_hw_state) (void);
 #endif
+
 	void *charger_private;	/* used by the msm_charger.c */
 };
 
@@ -78,13 +79,26 @@ struct msm_battery_gauge {
 	int (*is_battery_present) (void);
 	int (*is_battery_temp_within_range) (void);
 	int (*is_battery_id_valid) (void);
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-	int (*is_factory_cable) (void);
-#endif  //CONFIG_SKY_SMB136S_CHARGER
+#ifdef CONFIG_PANTECH_FB_MSM_MHL_SII9244 /* F_MHL_AUTO_CONNECT  MHL_KKCHO */
+	int (*is_mhl_cable) (void);
+#endif	
 	int (*get_battery_status)(void);
 	int (*get_batt_remaining_capacity) (void);
 	int (*monitor_for_recharging) (void);
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SMB137B_CHARGER)
+	int (*get_battery_id) (void);
+	int (*get_cable_id) (void);
+	int (*is_factory_cable) (void);
+#endif
 };
+
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+struct msm_battery_func {
+	int (*get_batt_mvolts) (void);
+	int (*get_batt_capacity) (void);
+};
+#endif
+
 /**
  * struct msm_charger_platform_data
  * @safety_time: max charging time in minutes
@@ -144,5 +158,9 @@ static inline int msm_charger_register_vbus_sn(void (*callback)(int))
 static inline void msm_charger_unregister_vbus_sn(void (*callback)(int))
 {
 }
+#endif
+
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+void msm_battery_func_register(struct msm_battery_func *batt_func);
 #endif
 #endif /* __MSM_CHARGER_H__ */

@@ -32,6 +32,12 @@
 #include <mach/socinfo.h>
 #include <mach/rpm-regulator.h>
 
+#if defined(CONFIG_PANTECH_DEBUG)
+#if defined(CONFIG_PANTECH_DEBUG_DCVS_LOG) //p14291_pantech_dbg
+#include <mach/pantech_debug.h> 
+#endif
+#endif
+
 #include "acpuclock.h"
 #include "avs.h"
 
@@ -84,11 +90,6 @@
 
 /* PTE EFUSE register. */
 #define QFPROM_PTE_EFUSE_ADDR		(MSM_QFPROM_BASE + 0x00C0)
-
-//pz1946 20111114 cpu_clock_low_level
-#if defined(CONFIG_SKY_SMB_CHARGER) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
-extern int sky_charging_status(void);
-#endif
 
 static const void * const clk_ctl_addr[] = {SPSS0_CLK_CTL_ADDR,
 			SPSS1_CLK_CTL_ADDR};
@@ -452,6 +453,10 @@ static struct clkctl_acpu_speed *acpu_freq_tbl;
 static struct clkctl_l2_speed *l2_freq_tbl = l2_freq_tbl_v2;
 static unsigned int l2_freq_tbl_size = ARRAY_SIZE(l2_freq_tbl_v2);
 
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+extern unsigned int pantech_charging_status(void);
+#endif
+
 static unsigned long acpuclk_8x60_get_rate(int cpu)
 {
 	return drv_state.current_speed[cpu]->acpuclk_khz;
@@ -767,6 +772,13 @@ static int acpuclk_8x60_set_rate(int cpu, unsigned long rate,
 
 	pr_debug("Switching from ACPU%d rate %u KHz -> %u KHz\n",
 		cpu, strt_s->acpuclk_khz, tgt_s->acpuclk_khz);
+
+#if defined(CONFIG_PANTECH_DEBUG)
+#if defined(CONFIG_PANTECH_DEBUG_DCVS_LOG) //p14291_pantech_dbg
+    if(pantech_debug_enable)
+	    pantech_debug_dcvs_log(cpu, strt_s->acpuclk_khz, tgt_s->acpuclk_khz);
+#endif
+#endif
 
 	/* Switch CPU speed. */
 	switch_sc_speed(cpu, tgt_s);
@@ -1084,11 +1096,12 @@ static int __init acpuclk_8x60_probe(struct platform_device *pdev)
 	scpll_init(L2, max_freq->l2_level->l_val);
 	regulator_init();
 	bus_init();
-//pz1946 20111114 cpu_clock_low_level
-#if defined(CONFIG_SKY_SMB_CHARGER) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
-	if(sky_charging_status())
+
+#if defined(CONFIG_SKY_CHARGING) || defined(CONFIG_SKY_SMB136S_CHARGER) || defined(CONFIG_SKY_SMB137B_CHARGER)
+	if(pantech_charging_status())
 		max_freq->acpuclk_khz = 384000;
 #endif
+
 	/* Improve boot time by ramping up CPUs immediately. */
 	for_each_online_cpu(cpu)
 		acpuclk_8x60_set_rate(cpu, max_freq->acpuclk_khz, SETRATE_INIT);

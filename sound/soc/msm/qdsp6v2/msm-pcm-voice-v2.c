@@ -312,7 +312,12 @@ static int msm_volte_rx_device_mute_put(struct snd_kcontrol *kcontrol,
 
 	pr_debug("%s: mute=%d\n", __func__, mute);
 
+/* 2013-05-21 LS1@SND For VoLTE autoanswer Rx mute. our VoLTE are using the VoIP session in EF56S */
+#ifdef CONFIG_SKY_SND_AUTOANSWER //CONFIG_PANTECH_SND 
+	voc_set_rx_device_mute(voc_get_session_id(VOIP_SESSION_NAME), mute);
+#else
 	voc_set_rx_device_mute(voc_get_session_id(VOLTE_SESSION_NAME), mute);
+#endif
 
 	return 0;
 }

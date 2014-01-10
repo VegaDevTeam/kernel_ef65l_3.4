@@ -26,10 +26,6 @@
 #include <mach/msm_iomap.h>
 #include <linux/pm.h>
 
-#ifdef CONFIG_MACH_MSM8X60_EF65L
-#include <linux/gpio.h>
-#endif
-
 /* Trips: from very hot to very cold */
 enum tsens_trip_type {
 	TSENS_TRIP_STAGE3 = 0,
@@ -187,22 +183,6 @@ static int tsens_tz_set_mode(struct thermal_zone_device *thermal,
 		writel(reg, TSENS_CNTL_ADDR);
 	}
 	tm_sensor->mode = mode;
-
-#ifdef CONFIG_MACH_MSM8X60_EF65L
-	{
-		pr_info("%s: 134 gpio_get_value: %d\n", __func__, gpio_get_value(134));
-		if (gpio_get_value(134) == 0)
-		{
-		       if (gpio_get_value(134) == 0)
-		       {
-				gpio_direction_output(131, 1);
-			       msleep(4000);
-				gpio_direction_output(131, 0);
-				panic("MDM Status PIN is 0 , MDM reset now\n");
-			}
-		}
-	}
-#endif
 
 	return 0;
 }
@@ -555,18 +535,6 @@ static const struct dev_pm_ops tsens_pm_ops = {
 };
 #endif
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-static struct thermal_zone_device *msm_thermal = NULL;
-
-int tsens_tz_get_temp_charging(unsigned long *temp)
-{
-        if(!msm_thermal)
-                return -1;
-        
-        return tsens_tz_get_temp(msm_thermal, temp);
-}
-#endif
-
 static int __devinit tsens_tm_probe(struct platform_device *pdev)
 {
 	unsigned int reg, i, calib_data, calib_data_backup;
@@ -635,10 +603,6 @@ static int __devinit tsens_tm_probe(struct platform_device *pdev)
 		tmdev->sensor[i].mode = THERMAL_DEVICE_DISABLED;
 	}
 
-#if defined(CONFIG_SKY_SMB136S_CHARGER)
-        msm_thermal = tmdev->sensor[0].tz_dev;
-#endif
-        
 	rc = request_threaded_irq(TSENS_UPPER_LOWER_INT, tsens_isr,
 		tsens_isr_thread, 0, "tsens", tmdev);
 	if (rc < 0) {

@@ -314,11 +314,20 @@ void emergency_restart(void)
 }
 EXPORT_SYMBOL_GPL(emergency_restart);
 
+#ifdef CONFIG_PANTECH_LCD_TURN_BACKLIGHT_OFF_WHEN_REBOOT_BEFORE_I2C_DEVICE_SHUTDOWN
+extern void mipi_samsung_shutdown_lcd(void);
+extern int lcd_setup_power(int power_state);
+#endif
+
 void kernel_restart_prepare(char *cmd)
 {
 	blocking_notifier_call_chain(&reboot_notifier_list, SYS_RESTART, cmd);
 	system_state = SYSTEM_RESTART;
 	usermodehelper_disable();
+#ifdef CONFIG_PANTECH_LCD_TURN_BACKLIGHT_OFF_WHEN_REBOOT_BEFORE_I2C_DEVICE_SHUTDOWN 
+	//for proctecting plm issue
+	mipi_samsung_shutdown_lcd();
+#endif 
 	device_shutdown();
 	syscore_shutdown();
 }
@@ -362,6 +371,8 @@ EXPORT_SYMBOL(unregister_reboot_notifier);
  *	Shutdown everything and perform a clean reboot.
  *	This is not safe to call in interrupt context.
  */
+
+
 void kernel_restart(char *cmd)
 {
 	kernel_restart_prepare(cmd);

@@ -47,6 +47,7 @@
 #include <mach/msm_rtb.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/printk.h>
+#include <mach/pantech_apanic.h>
 
 /*
  * Architectures can override it:
@@ -153,6 +154,19 @@ static char *log_buf = __log_buf;
 static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
 static int saved_console_loglevel = -1;
+
+
+#ifdef CONFIG_PANTECH_ERR_CRASH_LOGGING
+static struct pantech_log_header pantech_log;
+
+struct pantech_log_header *get_pantech_klog_dump_address(void)
+{
+    pantech_log.klog_buf_address = (uint32_t*)virt_to_phys((void*)log_buf);
+    pantech_log.klog_end_idx = (uint32_t*)virt_to_phys((void*)&log_end);
+    return &pantech_log;
+}
+#endif
+
 
 #ifdef CONFIG_KEXEC
 /*

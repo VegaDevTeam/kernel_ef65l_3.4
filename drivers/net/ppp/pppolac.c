@@ -47,6 +47,11 @@
 #define PPP_ADDR	0xFF
 #define PPP_CTRL	0x03
 
+
+#ifndef PPP_MTU
+#define PPP_MTU 1500
+#endif
+
 union unaligned {
 	__u32 u32;
 } __attribute__((packed));

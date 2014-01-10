@@ -40,6 +40,10 @@
 #include <linux/rtc.h>
 #include <linux/input.h>
 
+#ifdef CONFIG_SKY_SMB136S_CHARGER
+#include <linux/msm-charger.h>
+#endif
+
 #define MAX17040_VCELL_MSB	0x02
 #define MAX17040_VCELL_LSB	0x03
 #define MAX17040_SOC_MSB	0x04
@@ -102,11 +106,11 @@
 #define SKY_MULT_1000000(x)	(x*1000000)	
 #define SKY_DIV_1000000(x)	(x/1000000)	
 
-#define SKY_SOC_FULL	1074	// 4.25V
-#define SKY_SOC_EMPTY	15
+#define SKY_SOC_FULL	1159 // p11220 20130717 : 1074 -> 1159
+#define SKY_SOC_EMPTY	33 // p11220 20130717 : 15 -> 33
 
-#define CHARGING_DONE_THRESHOLD	1182	// 4.35V
-#define RECHARGING_THRESHOLD 	1144	// 4.3V
+#define CHARGING_DONE_THRESHOLD	1182 // 4.333V
+#define RECHARGING_THRESHOLD 	1165 // p11220 20130717 : 1144 -> 1165  4.318V
 
 #define FINISHED_CHARGING		5
 //sleep config
@@ -119,8 +123,10 @@
 extern int sky_get_plug_state(void);
 extern int sky_is_batt_status(void);
 extern void msm_pm_set_max_sleep_time(int64_t sleep_time_ns);
+#ifdef MAX17040_DEBUG_QUICK	
 extern int pm8058_chg_nobattery_factory_cable(void);
 extern int pmic8058_tz_get_temp_charging(unsigned long *pm_temp);
+#endif
 
 extern atomic_t smb_charger_state;
 
@@ -480,7 +486,11 @@ static void max17040_set_rcomp(void)
 	int ret=0,i=0;	
 	int chg_type;
 
+#ifdef MAX17040_DEBUG_QUICK	
 	chg_type = atomic_read(&smb_charger_state);
+#else
+	chg_type = 0;
+#endif
 	
 	if((high_current_rcomp_mode == 1) && (chg_type == 0)){
 		ret = max17040_write_reg(MAX17040_RCOMP_MSB, 0x25,0x00);
@@ -609,11 +619,13 @@ static void max17040_get_vcell(void)
 	max17040_data.vcell = avalue;
 	mutex_unlock(&max17040_data.data_mutex);	
 	
+#ifdef MAX17040_DEBUG_QUICK	
 //Factory cable debug
 #ifdef CONFIG_SKY_SMB136S_CHARGER
 //printk("Max17040_data.vcell = %d\n", max17040_data.vcell);
 	if(pm8058_chg_nobattery_factory_cable())
 		max17040_data.vcell = 4100;
+#endif
 #endif
 
 	dbg_func_out();	
@@ -689,10 +701,12 @@ static void max17040_get_soc(void)
 	else
 		charge_state=0;	
 
+#ifdef MAX17040_DEBUG_QUICK	
 	// if present factory cable, soc is 50%
 	//pr_err("%s : soc = %d\n", __func__, soc); 
 	if(pm8058_chg_nobattery_factory_cable())
 		soc = 50;
+#endif
 
 	if(max17040_data.event) // soc is changed 
 	{
@@ -919,6 +933,7 @@ static void max17040_work(struct work_struct *work)
 		}
 	}
 
+#ifdef NEED_FIX_BUILD_ERROR
 	if(max17040_raw_soc != max17040_raw_pre_soc) {
 		pr_err("[SOC:%d->%d]\n", max17040_raw_pre_soc, max17040_raw_soc);
 		/* if battery is fully charged, charging done*/
@@ -935,7 +950,8 @@ static void max17040_work(struct work_struct *work)
 			notify_event_recharging();
 		}
 	}
-	
+#endif
+
 #ifdef MAX17040_ALARM_RTC_ENABLE
 	di->last_poll=alarm_get_elapsed_realtime();		
 	/* prevent suspend before starting the alarm */
@@ -947,7 +963,9 @@ static void max17040_work(struct work_struct *work)
 #else
 #ifdef CONFIG_SKY_SMB136S_CHARGER
 	chg_type = atomic_read(&smb_charger_state);
+#ifdef MAX17040_DEBUG_QUICK	
         pmic8058_tz_get_temp_charging(&pm_temp);
+#endif
 	if(thermal_time_check_count != 3) { 
 		pm_temp_sum = pm_temp_sum + pm_temp;
 		current_batt_delta = pm_temp;
@@ -1051,6 +1069,29 @@ void max17040_batt_late_resume(struct early_suspend *h)
 #endif// CONFIG_HAS_EARLYSUSPEND
 #endif// MAX17040_ALARM_RTC_ENABLE
 
+#ifdef CONFIG_SKY_SMB136S_CHARGER
+static int max17040_get_capacity(void)
+{
+	if(max17040_data.i2c_state)
+		return  max17040_data.prev_soc;		
+
+	return  max17040_data.soc;
+}
+
+static int max17040_get_mvolts(void)
+{
+	if(max17040_data.i2c_state_vol)
+		return  max17040_data.prev_voltage*1000;		
+
+	return  max17040_data.vcell*1000;
+}
+
+struct msm_battery_func max17040_ms_batt_func = {
+	.get_batt_mvolts = max17040_get_mvolts,
+	.get_batt_capacity = max17040_get_capacity,
+};
+#endif
+
 static int __devinit max17040_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -1066,6 +1107,11 @@ static int __devinit max17040_probe(struct i2c_client *client,
 
 	max17040_data.client = client;
 	i2c_set_clientdata(client, &max17040_data);
+
+#ifdef CONFIG_SKY_SMB136S_CHARGER
+	msm_battery_func_register(&max17040_ms_batt_func);
+#endif
+
 	//sys file system are registered
 	max17040_data.battery.name		= "batterys";
 	max17040_data.battery.type		= POWER_SUPPLY_TYPE_BATTERY;

@@ -27,6 +27,10 @@
 
 #define to_mmc_driver(d)	container_of(d, struct mmc_driver, drv)
 
+#ifdef CONFIG_SKY_WLAN_BCM4330  // 2013-08-29 thkim_wifi check wifi mmc card
+#define CHECK_WLAN_MMC "mmc3"
+#endif
+
 static ssize_t mmc_type_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -354,6 +358,13 @@ void mmc_remove_card(struct mmc_card *card)
 		} else {
 			pr_info("%s: card %04x removed\n",
 				mmc_hostname(card->host), card->rca);
+			#ifdef CONFIG_SKY_WLAN_BCM4330  // 2013-08-29 thkim_wifi check wifi mmc card
+			if(!strcmp(CHECK_WLAN_MMC, mmc_hostname(card->host))){
+				pr_info("%s: pantech wlan mmc card %04x removed\n",
+				mmc_hostname(card->host), card->rca);
+				dump_stack();
+				}
+			#endif
 		}
 		device_del(&card->dev);
 	}

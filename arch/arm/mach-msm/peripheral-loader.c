@@ -415,6 +415,11 @@ void pil_put(void *peripheral_handle)
 	if (WARN(!pil->count, "%s: %s: Reference count mismatch\n",
 			pil->desc->name, __func__))
 		goto err_out;
+// 2013.07.16 code by lee.kyungsoo & effectivesky for dev encryption.
+#if 1
+	if (pil->count == 1)		
+		goto err_out;
+#endif
 	if (!--pil->count)
 		pil_shutdown(pil);
 	mutex_unlock(&pil->lock);

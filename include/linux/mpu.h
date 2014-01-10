@@ -17,8 +17,6 @@
 #include "mpu3050.h"
 #endif
 
-#define CONFIG_EF36_BOARD       1
-
 /* Number of axes on each sensor */
 #define GYRO_NUM_AXES               (3)
 #define ACCEL_NUM_AXES              (3)
@@ -132,9 +130,7 @@ enum ext_slave_id {
 	ACCEL_ID_KXTF9,
 	ACCEL_ID_BMA150,
 	ACCEL_ID_BMA222,
-#if	defined(CONFIG_EF39S_SENSORS_BMA250) || defined(CONFIG_EF40S_SENSORS_BMA250) || defined(CONFIG_EF40K_SENSORS_BMA250)  || defined(CONFIG_EF65L_SENSORS_BMA250)
 	ACCEL_ID_BMA250,
-#endif
 	ACCEL_ID_ADI346,
 	ACCEL_ID_MMA8450,
 	ACCEL_ID_MMA8451,
@@ -289,11 +285,11 @@ struct ext_slave_descr *adxl346_get_slave_descr(void);
 #define get_accel_slave_descr adxl346_get_slave_descr
 #endif
 
-//#ifdef CONFIG_SENSORS_BMA150	/* Bosch accelerometer */
+#ifdef CONFIG_SENSORS_BMA150	/* Bosch accelerometer */
 struct ext_slave_descr *bma150_get_slave_descr(void);
 #undef get_accel_slave_descr
 #define get_accel_slave_descr bma150_get_slave_descr
-//#endif
+#endif
 
 #ifdef CONFIG_SENSORS_BMA222	/* Bosch 222 accelerometer */
 struct ext_slave_descr *bma222_get_slave_descr(void);
@@ -302,7 +298,7 @@ struct ext_slave_descr *bma222_get_slave_descr(void);
 #endif
 
 //#ifdef CONFIG_MPU_SENSORS_BMA250	/* Bosch 250 accelerometer */
-#if defined(CONFIG_EF39S_SENSORS_BMA250) || defined(CONFIG_EF40S_SENSORS_BMA250) || defined(CONFIG_EF40K_SENSORS_BMA250)  || defined(CONFIG_EF65L_SENSORS_BMA250)
+#ifdef CONFIG_SENSORS_BMA250
 struct ext_slave_descr *bma250_get_slave_descr(void);
 #undef get_accel_slave_descr
 #define get_accel_slave_descr bma250_get_slave_descr
@@ -388,11 +384,11 @@ struct ext_slave_descr *lsm303dlhm_get_slave_descr(void);
 #define get_compass_slave_descr lsm303dlhm_get_slave_descr
 #endif
 
-//#ifdef CONFIG_SENSORS_YAS529	/* Yamaha compass */
+#ifdef CONFIG_SENSORS_YAS529	/* Yamaha compass */
 struct ext_slave_descr *yas529_get_slave_descr(void);
 #undef get_compass_slave_descr
 #define get_compass_slave_descr yas529_get_slave_descr
-//#endif
+#endif
 
 #ifdef CONFIG_SENSORS_HSCDTD00XX	/* Alps compass */
 struct ext_slave_descr *hscdtd00xx_get_slave_descr(void);
@@ -410,6 +406,5 @@ struct ext_slave_descr *bma085_get_slave_descr(void);
 #undef get_pressure_slave_descr
 #define get_pressure_slave_descr bma085_get_slave_descr
 #endif
-
 
 #endif				/* __MPU_H_ */

@@ -33,6 +33,8 @@
 #include <linux/module.h>
 
 #define CREATE_TRACE_POINTS
+//#define USE_REGULATOR_SLEEP_DEBUG
+
 #include <trace/events/regulator.h>
 
 #include "dummy.h"
@@ -3505,6 +3507,84 @@ unlock:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(regulator_suspend_finish);
+
+
+#ifdef USE_REGULATOR_SLEEP_DEBUG
+char g_print_buff[80][80];
+int g_print_buff_index = 0;
+
+void print_buff(const char * data)
+{
+	if (g_print_buff_index == 0)
+		memset(g_print_buff[0], 0, 80*80);
+	
+	strncpy(g_print_buff[g_print_buff_index], data, 80);
+
+	g_print_buff_index++;
+
+	if (g_print_buff_index >= 80)
+		g_print_buff_index = 0;
+}
+
+void regulator_real_print_use_regulator(void)
+{
+	int index = 0;
+	
+	for (; index < g_print_buff_index; index++)
+		printk("%s", g_print_buff[index]);
+	g_print_buff_index=0;
+}
+EXPORT_SYMBOL_GPL(regulator_real_print_use_regulator);
+
+
+void regulator_print_use_regulator(void)
+{
+	struct regulator_dev *rdev;
+
+	mutex_lock(&regulator_list_mutex);
+
+	print_buff("Device-Supply                    "
+		"EN    Min_uV   Max_uV  load_uA\n");
+
+	list_for_each_entry(rdev, &regulator_list, list) {
+		mutex_lock(&rdev->mutex);
+
+		if (rdev->use_count > 0) {
+			struct regulator *reg;
+			char *supply_name;
+			char line_buf[80];
+			list_for_each_entry(reg, &rdev->consumer_list, list) {
+				if (reg->supply_name)
+					supply_name = reg->supply_name;
+				else
+					supply_name = "(null)-(null)";
+
+				if (reg->enabled)
+				{
+					memset(line_buf, 0, 80);
+					sprintf(line_buf, "%-32s %c   %8d %8d %8d\n", supply_name,
+						(reg->enabled ? 'Y' : 'N'), reg->min_uV, reg->max_uV,
+						reg->uA_load);
+					print_buff(line_buf);
+				}
+			}
+		}
+		mutex_unlock(&rdev->mutex);
+	}
+	mutex_unlock(&regulator_list_mutex);
+}
+EXPORT_SYMBOL_GPL(regulator_print_use_regulator);
+#else
+void regulator_real_print_use_regulator(void)
+{
+}
+EXPORT_SYMBOL_GPL(regulator_real_print_use_regulator);
+
+void regulator_print_use_regulator(void)
+{
+}
+EXPORT_SYMBOL_GPL(regulator_print_use_regulator);
+#endif
 
 /**
  * regulator_has_full_constraints - the system has fully specified constraints

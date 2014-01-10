@@ -10,4 +10,7 @@
 **
 **    Copyright (c) 2010 by PANTECH Incorporated.  All Rights Reserved.
 *************************************************************************************************/
-//jhpark-MVS #define MVS_PCM_DUMP
+#ifdef CONFIG_SKY_SND_MVS
+#define MVS_AMR_DUMP
+//#define MVS_PCM_DUMP
+#endif

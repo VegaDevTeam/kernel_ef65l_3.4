@@ -32,14 +32,6 @@
 
 #include "gadget_chips.h"
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#include <linux/switch.h>
-#include "f_pantech_android.h"
-
-static bool b_pantech_usb_module = false;
-static bool b_qualcomm_usb_mode = false;
-#endif
-
 /*
  * Kbuild is not very cooperative with respect to linking separately
  * compiled library objects into one module.  So for now we won't use
@@ -68,9 +60,7 @@ static bool b_qualcomm_usb_mode = false;
 #include "u_ctrl_hsuart.c"
 #include "u_data_hsuart.c"
 #include "f_serial.c"
-#ifndef CONFIG_ANDROID_PANTECH_USB
 #include "f_acm.c"
-#endif
 #include "f_adb.c"
 #include "f_ccid.c"
 #include "f_mtp.c"
@@ -81,11 +71,13 @@ static bool b_qualcomm_usb_mode = false;
 #include "u_ether.c"
 #include "u_bam_data.c"
 #include "f_mbim.c"
-#if defined(CONFIG_ANDROID_PANTECH_USB_USBNET)
-#include "f_usbnet.c"
-#endif
-#if defined(CONFIG_ANDROID_PANTECH_USB_OBEX)
+
+#ifdef CONFIG_PANTECH_ANDROID_OBEX
 #include "pantech_f_obex.c"
+#endif
+
+#if defined(CONFIG_MACH_MSM8X60_EF39S) || defined(CONFIG_MACH_MSM8X60_EF40S)
+#define FEATURE_MDM_APK_UMS_CTL
 #endif
 
 MODULE_AUTHOR("Mike Lockwood");
@@ -98,6 +90,7 @@ static const char longname[] = "Gadget Android";
 /* Default vendor and product IDs, overridden by userspace */
 #define VENDOR_ID		0x18D1
 #define PRODUCT_ID		0x0001
+#define FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
 
 struct android_usb_function {
 	char *name;
@@ -130,10 +123,6 @@ struct android_usb_function {
 	int (*ctrlrequest)(struct android_usb_function *,
 					struct usb_composite_dev *,
 					const struct usb_ctrlrequest *);
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	int current_enabled;
-	int request_enabled;
-#endif
 };
 
 struct android_dev {
@@ -154,6 +143,21 @@ struct android_dev {
 	struct work_struct work;
 };
 
+#ifdef CONFIG_PANTECH_ANDROID_FACTORY_MODE
+static struct delayed_work factory_work;
+static int is_factory_mode=0;
+static int is_factory_called=0;
+#endif
+
+#ifdef FEATURE_MDM_APK_UMS_CTL
+static bool is_mdm_enabled = false;
+extern void pantech_pullup_internal_control(int);
+extern bool get_pantech_mdm_state(void)
+{
+    return is_mdm_enabled;
+}
+#endif
+
 static struct class *android_class;
 static struct android_dev *_android_dev;
 static int android_bind_config(struct usb_configuration *c);
@@ -164,10 +168,6 @@ static void android_unbind_config(struct usb_configuration *c);
 #define STRING_PRODUCT_IDX		1
 #define STRING_SERIAL_IDX		2
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#define STRING_CONFIG_IDX   3
-#endif
-
 static char manufacturer_string[256];
 static char product_string[256];
 static char serial_string[256];
@@ -177,9 +177,6 @@ static struct usb_string strings_dev[] = {
 	[STRING_MANUFACTURER_IDX].s = manufacturer_string,
 	[STRING_PRODUCT_IDX].s = product_string,
 	[STRING_SERIAL_IDX].s = serial_string,
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	[STRING_CONFIG_IDX].s = "Pantech Android Composite Device",
-#endif
 	{  }			/* end of list */
 };
 
@@ -197,10 +194,18 @@ static struct usb_device_descriptor device_desc = {
 	.bLength              = sizeof(device_desc),
 	.bDescriptorType      = USB_DT_DEVICE,
 	.bcdUSB               = __constant_cpu_to_le16(0x0200),
+#ifdef CONFIG_PANTECH_ANDROID_USB
+	.bDeviceClass         = USB_CLASS_COMM,
+#else
 	.bDeviceClass         = USB_CLASS_PER_INTERFACE,
+#endif
 	.idVendor             = __constant_cpu_to_le16(VENDOR_ID),
 	.idProduct            = __constant_cpu_to_le16(PRODUCT_ID),
+#ifdef CONFIG_PANTECH_ANDROID_USB
+	.bcdDevice            = 0x00,
+#else
 	.bcdDevice            = __constant_cpu_to_le16(0xffff),
+#endif
 	.bNumConfigurations   = 1,
 };
 
@@ -227,9 +232,6 @@ enum android_device_state {
 	USB_CONNECTED,
 	USB_CONFIGURED,
 };
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#include "pantech_android.c"
-#endif
 
 static void android_pm_qos_update_latency(struct android_dev *dev, int vote)
 {
@@ -250,7 +252,23 @@ static void android_pm_qos_update_latency(struct android_dev *dev, int vote)
 				PM_QOS_DEFAULT_VALUE);
 	last_vote = vote;
 }
+#ifdef CONFIG_PANTECH_ANDROID_FACTORY_MODE
+static int function_is_enabled(struct android_dev *dev, char *name){
+	struct android_usb_function *f;
 
+	
+	list_for_each_entry(f, &dev->enabled_functions, enabled_list){
+		if(!strcmp(f->name, name)){
+			return 1;
+		}
+	}
+
+	return 0;
+}
+#endif
+#ifdef FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
+extern enum chg_type pantech_usb_get_chg_type(void);
+#endif
 static void android_work(struct work_struct *data)
 {
 	struct android_dev *dev = container_of(data, struct android_dev, work);
@@ -643,7 +661,6 @@ static int diag_function_bind_config(struct android_usb_function *f,
 	strlcpy(buf, diag_clients, sizeof(buf));
 	b = strim(buf);
 
-	printk("%s string %s \n",__func__,b);
 	while (b) {
 		notify = NULL;
 		name = strsep(&b, ",");
@@ -652,7 +669,6 @@ static int diag_function_bind_config(struct android_usb_function *f,
 			notify = _android_dev->pdata->update_pid_and_serial_num;
 
 		if (name) {
-			printk("name: %s \n ",name);
 			err = diag_function_add(c, name, notify);
 			if (err)
 				pr_err("diag: Cannot open channel '%s'", name);
@@ -743,7 +759,6 @@ static struct android_usb_function serial_function = {
 	.attributes	= serial_function_attributes,
 };
 
-#ifndef CONFIG_ANDROID_PANTECH_USB
 /* ACM */
 static char acm_transports[32];	/*enabled ACM ports - "tty[,sdio]"*/
 static ssize_t acm_transports_store(
@@ -815,43 +830,8 @@ static struct android_usb_function acm_function = {
 	.bind_config	= acm_function_bind_config,
 	.attributes	= acm_function_attributes,
 };
-#endif
-#ifdef CONFIG_ANDROID_PANTECH_USB_USBNET
-/* USBNET */ 
-static int usbnet_function_init(struct android_usb_function *f, struct usb_composite_dev *cdev)
-{
-	pr_debug("%s usbnet init function nothing work!!!\n", __func__);
-	usbnet_init_setup();
-	return 0;
-}
 
-static void usbnet_function_cleanup(struct android_usb_function *f)
-{
-	usbnet_cleanup();
-}
-
-static int usbnet_function_bind_config(struct android_usb_function *f, struct usb_configuration *c)
-{
-	return usbnet_bind_config(c);
-}
-
-static int usbnet_function_ctrlrequest(struct android_usb_function *f,
-						struct usb_composite_dev *cdev,
-						const struct usb_ctrlrequest *c)
-{
-	return usbnet_ctrlrequest(cdev, c);
-}
-
-static struct android_usb_function usbnet_function = {
-	.name		= "usbnet",
-	.init		= usbnet_function_init,
-	.cleanup	= usbnet_function_cleanup,
-	.bind_config	= usbnet_function_bind_config,
-	.ctrlrequest	= usbnet_function_ctrlrequest,
-};
-#endif
-
-#ifdef CONFIG_ANDROID_PANTECH_USB_OBEX
+#ifdef CONFIG_PANTECH_ANDROID_OBEX
 /* PANTECH OBEX */
 static int pantech_obex_function_init(struct android_usb_function *f, struct usb_composite_dev *cdev)
 {
@@ -878,7 +858,6 @@ static struct android_usb_function pantech_obex_function = {
 	.bind_config	= pantech_obex_function_bind_config,
 };
 #endif
-
 /* CCID */
 static int ccid_function_init(struct android_usb_function *f,
 					struct usb_composite_dev *cdev)
@@ -1173,10 +1152,11 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	if (!config)
 		return -ENOMEM;
 
-    /* 111109 LS1-JHM modified : eMMC sdcard */
-#if defined (PANTECH_STORAGE_DEFAULT) || defined(PANTECH_STORAGE_INTERNAL_EMUL)
+#if defined (PANTECH_STORAGE_DEFAULT) || defined(PANTECH_STORAGE_INTERNAL_EMUL) //p13795 add
 	config->fsg.nluns = 1;
 	name[0] = "lun";
+#endif
+
 	if (dev->pdata->cdrom) {
 		config->fsg.nluns = 2;
 		config->fsg.luns[1].cdrom = 1;
@@ -1185,24 +1165,20 @@ static int mass_storage_function_init(struct android_usb_function *f,
 		name[1] = "lun0";
 	}
 
+#if defined (PANTECH_STORAGE_DEFAULT) || defined(PANTECH_STORAGE_INTERNAL_EMUL) //p13795 add
 	config->fsg.luns[0].removable = 1;
 #else
 	config->fsg.nluns = 2;
-	config->fsg.luns[0].removable = 1;
+  config->fsg.luns[0].removable = 1;
 	config->fsg.luns[1].removable = 1;
+  name[0] = "lun0";
+  name[1] = "lun1";
 #endif
 
-#ifdef CONFIG_ANDROID_PANTECH_USB
+#ifdef CONFIG_PANTECH_ANDROID_USB
 	config->fsg.vendor_name = "Pantech";
 	config->fsg.product_name = "MStorage";
 #endif
-#ifdef CONFIG_ANDROID_PANTECH_USB_CDFREE
-	config->fsg.luns[config->fsg.nluns].removable = 1;
-	config->fsg.luns[config->fsg.nluns].cdrom = 1;
-	config->fsg.luns[config->fsg.nluns].ro = 1;
-	config->fsg.nluns++;
-#endif
-
 	common = fsg_common_init(NULL, cdev, &config->fsg);
 	if (IS_ERR(common)) {
 		kfree(config);
@@ -1210,31 +1186,11 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	}
 
 	for (i = 0; i < config->fsg.nluns; i++) {
-#if defined (PANTECH_STORAGE_DEFAULT) || defined(PANTECH_STORAGE_INTERNAL_EMUL)
 		err = sysfs_create_link(&f->dev->kobj,
 					&common->luns[i].dev.kobj,
 					name[i]);
 		if (err)
 			goto error;
-#else
-		err = sysfs_create_link(&f->dev->kobj,
-					&common->luns[0].dev.kobj,
-					"lun0");
-		if (err) {
-	    fsg_common_release(&common->ref);
-			kfree(config);
-			return err;
-		}
-
-		err = sysfs_create_link(&f->dev->kobj,
-					&common->luns[1].dev.kobj,
-					"lun1");
-		if (err) {
-	    fsg_common_release(&common->ref);
-			kfree(config);
-			return err;
-		}
-#endif
 	}
 
 	config->common = common;
@@ -1286,23 +1242,8 @@ static DEVICE_ATTR(inquiry_string, S_IRUGO | S_IWUSR,
 					mass_storage_inquiry_show,
 					mass_storage_inquiry_store);
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_CDFREE
-static ssize_t mass_storage_cdrom_lun_show(struct device *dev,
-				struct device_attribute *attr, char *buf)
-{
-	struct android_usb_function *f = dev_get_drvdata(dev);
-	struct mass_storage_function_config *config = f->config;
-	return snprintf(buf, PAGE_SIZE, "%d\n", config->fsg.nluns - 1);
-}
-
-static DEVICE_ATTR(cdrom_lun, S_IRUGO, mass_storage_cdrom_lun_show, NULL);
-#endif
-
 static struct device_attribute *mass_storage_function_attributes[] = {
 	&dev_attr_inquiry_string,
-#ifdef CONFIG_ANDROID_PANTECH_USB_CDFREE
-	&dev_attr_cdrom_lun,
-#endif
 	NULL
 };
 
@@ -1358,18 +1299,13 @@ static struct android_usb_function *supported_functions[] = {
 	&serial_function,
 	&adb_function,
 	&ccid_function,
-#ifndef CONFIG_ANDROID_PANTECH_USB
 	&acm_function,
-#endif
 	&mtp_function,
 	&ptp_function,
 	&rndis_function,
 	&mass_storage_function,
 	&accessory_function,
-#ifdef CONFIG_ANDROID_PANTECH_USB_USBNET
-	&usbnet_function,
-#endif
-#ifdef CONFIG_ANDROID_PANTECH_USB_OBEX
+#ifdef CONFIG_PANTECH_ANDROID_OBEX
 	&pantech_obex_function,
 #endif
 	NULL
@@ -1499,15 +1435,8 @@ static int android_enable_function(struct android_dev *dev, char *name)
 	struct android_usb_function *f;
 	while ((f = *functions++)) {
 		if (!strcmp(name, f->name)) {
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-			if(b_pantech_usb_module){
-				f->request_enabled = 1;
-			}else{
-			list_add_tail(&f->enabled_list, &dev->enabled_functions);
-			}
-#else
-			list_add_tail(&f->enabled_list, &dev->enabled_functions);
-#endif
+			list_add_tail(&f->enabled_list,
+						&dev->enabled_functions);
 			return 0;
 		}
 	}
@@ -1570,43 +1499,19 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	char *name;
 	char buf[256], *b;
 	int err;
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	struct android_usb_function **functions;
-	struct android_usb_function *f;
-#endif
+
 	mutex_lock(&dev->mutex);
 
 	if (dev->enabled) {
 		mutex_unlock(&dev->mutex);
 		return -EBUSY;
 	}
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
 
-	printk(KERN_ERR "[%s] called\n", __func__);
-	if(b_pantech_usb_module){
-		functions = dev->functions;
-		while ((f = *functions++)) {
-			f->request_enabled = 0;
-		}
-	}else{
 	INIT_LIST_HEAD(&dev->enabled_functions);
-	}
-
-#else
-	INIT_LIST_HEAD(&dev->enabled_functions);
-#endif
 
 	strlcpy(buf, buff, sizeof(buf));
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	if(!strcmp(buf, "none")){
-		printk(KERN_ERR "%s this command skip!!! %s\n", __func__, buf);
-		return size;
-	}
-#endif
 	b = strim(buf);
 
-	printk(KERN_ERR "[%s] [%s]\n", __func__, buf);
-	
 	while (b) {
 		name = strsep(&b, ",");
 		if (name) {
@@ -1615,12 +1520,6 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 				pr_err("android_usb: Cannot enable '%s'", name);
 		}
 	}
-
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	if(b_pantech_usb_module){
-		android_enable_function_cb(dev->functions);
-	}
-#endif
 
 	mutex_unlock(&dev->mutex);
 
@@ -1649,7 +1548,6 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 	mutex_lock(&dev->mutex);
 
 	sscanf(buff, "%d", &enabled);
-	printk(KERN_ERR "[%s]:val[%d] prev[%d]\n", __func__, enabled, dev->enabled);
 	if (enabled && !dev->enabled) {
 		/*
 		 * Update values in composite driver's copy of
@@ -1667,8 +1565,16 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 		}
 		android_enable(dev);
 		dev->enabled = true;
+
+#ifdef CONFIG_PANTECH_ANDROID_FACTORY_MODE
+		is_factory_called= 0;
+#endif
+
 	} else if (!enabled && dev->enabled) {
 		android_disable(dev);
+#ifdef FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
+		cdev->mute_switch = 1;
+#endif
 		list_for_each_entry(f, &dev->enabled_functions, enabled_list) {
 			if (f->disable)
 				f->disable(f);
@@ -1683,6 +1589,282 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 
 	return size;
 }
+
+int android_get_udc_state(void)
+{
+	struct android_dev *dev = _android_dev;
+	struct usb_composite_dev *cdev;
+	int ret;
+
+	if(_android_dev == NULL || _android_dev->cdev == NULL){
+		ret = 3;
+	}else{
+		cdev = dev->cdev;
+	if(cdev->config){
+		ret = 1;
+	}else{
+		ret = 0;
+	}
+	}
+	
+
+	return ret;
+}
+
+#ifdef CONFIG_PANTECH_ANDROID_FACTORY_MODE
+static ssize_t factory_mode_show(struct device *pdev, struct device_attribute *attr,
+			   char *buf)
+{
+	//struct android_dev *dev = dev_get_drvdata(pdev);
+	
+	return snprintf(buf, PAGE_SIZE, "%d\n", is_factory_mode);
+}
+
+
+static ssize_t factory_mode_store(struct device *pdev, struct device_attribute *attr,
+			    const char *buff, size_t size)
+{
+
+	sscanf(buff, "%d", &is_factory_mode);
+	//printk("^^ factory %d\n",is_factory_mode);
+	return size;
+}
+
+
+	
+	
+int set_factory_mode(void){
+	struct android_dev *dev = _android_dev;
+	struct usb_composite_dev *cdev = dev->cdev;
+	struct android_usb_function *f;
+	char *name;
+	char buf[256], *b;
+	int err = 0;
+
+	static char *product_string_factory = "Android(FactoryMode)";
+	int is_adb_enabled = 0;
+	
+	printk("set_factory_mode\n");
+	if(dev == NULL){
+		printk("dev is NULL\n");
+		return 0;
+	}
+	is_adb_enabled = function_is_enabled(dev , "adb"); /* This function is called before usb_remove_config */
+
+	if(is_adb_enabled){
+		strlcpy(buf, "diag,adb,serial", sizeof(buf));
+	}else{
+		strlcpy(buf, "diag,serial", sizeof(buf));
+	}	
+
+	android_disable(dev);
+
+	list_for_each_entry(f, &dev->enabled_functions, enabled_list){
+		if (f->disable)
+			f->disable(f);
+	}
+
+	dev->enabled = false;
+
+
+	strings_dev[STRING_PRODUCT_IDX].s = product_string_factory;
+
+
+#if defined(CONFIG_MACH_MSM8X60_33S) || defined(CONFIG_MACH_MSM8X60_34C) || defined(CONFIG_MACH_MSM8X60_34K) || defined(CONFIG_MACH_MSM8X60_35L)
+	strlcpy(diag_clients, "diag", sizeof(diag_clients));
+	strlcpy(serial_transports, "tty", sizeof(serial_transports));
+#elif defined(CONFIG_MACH_MSM8X60_39S) || defined(CONFIG_MACH_MSM8X60_40S) || defined(CONFIG_MACH_MSM8X60_40K) || defined(CONFIG_MACH_MSM8X60_65L)
+	strlcpy(diag_clients, "diag,diag_mdm", sizeof(diag_clients));
+	strlcpy(serial_transports, "sdio", sizeof(serial_transports));
+#endif
+
+	mutex_lock(&dev->mutex);
+
+	if (dev->enabled) {
+		mutex_unlock(&dev->mutex);
+		return -EBUSY;
+	}
+
+	INIT_LIST_HEAD(&dev->enabled_functions);
+
+
+	b = strim(buf);
+
+	while (b) {
+		name = strsep(&b, ",");
+		if (name) {
+			err = android_enable_function(dev, name);
+			if (err)
+				pr_err("android_usb: Cannot enable '%s'", name);
+		}
+	}
+
+	mutex_unlock(&dev->mutex);
+
+	
+	/* Set the factory mode descriptor. */
+	device_desc.idVendor = 0x10A9;
+	device_desc.idProduct = 0x1104;
+	device_desc.bDeviceClass = 0x02;
+	device_desc.bDeviceSubClass = 0x00;
+	device_desc.bDeviceProtocol = 0x00;
+	
+	cdev->desc.idVendor = device_desc.idVendor;
+	cdev->desc.idProduct = device_desc.idProduct;
+	cdev->desc.bcdDevice = device_desc.bcdDevice;
+	cdev->desc.bDeviceClass = device_desc.bDeviceClass;
+	cdev->desc.bDeviceSubClass = device_desc.bDeviceSubClass;
+	cdev->desc.bDeviceProtocol = device_desc.bDeviceProtocol;
+
+	msleep(500);
+
+	list_for_each_entry(f, &dev->enabled_functions, enabled_list)
+	{
+			if (f->enable)
+				f->enable(f);
+	}
+
+	android_enable(dev);
+
+	dev->enabled = true;
+
+	return 0; 
+}
+
+static void pantech_factory_work(struct work_struct *data)
+{
+	set_factory_mode();
+}
+
+static int factory_mode_ctrlrequest(struct usb_composite_dev *cdev,
+	const struct usb_ctrlrequest *ctrl){  
+
+	int value = -EOPNOTSUPP;  
+	u16 wIndex = le16_to_cpu(ctrl->wIndex);  
+	u16 wValue = le16_to_cpu(ctrl->wValue);  
+	u16 wLength = le16_to_cpu(ctrl->wLength);  
+	struct usb_request *req = cdev->req;	
+
+	
+
+
+	if(((ctrl->bRequestType & USB_TYPE_MASK) == USB_TYPE_VENDOR)     
+		&&(ctrl->bRequest == 0x70) && (wValue == 1) && (wLength == 0) && (wIndex == 0)){
+			printk("^^^^^^ It's factory driver\n");
+			if(is_factory_called >0){
+				//printk("^^ is_factory_called >0\n");
+				return value;
+			}else{
+				//printk("^^ is_factory_called == 0\n");
+				is_factory_called++;
+			}
+			if(is_factory_mode == 0){
+				schedule_delayed_work(&factory_work, msecs_to_jiffies(10));
+				value = 0;
+				if(value >= 0){
+					int rc;
+
+					req->zero = value < wLength;					
+					req->length = value;
+					//printk("^^^^^^ It's factory driver2\n");
+					rc = usb_ep_queue(cdev->gadget->ep0, cdev->req, GFP_ATOMIC);
+					if(rc < 0)
+						printk(KERN_ERR "%s setup response queue error\n", __func__);
+				}
+				
+			}else{
+				
+			} 
+	}
+	else{
+		strings_dev[STRING_PRODUCT_IDX].s = product_string;
+		//printk("^^^^^^ It's not factory driver\n");
+	}  
+
+	return value;
+}
+#endif
+
+
+#ifdef FEATURE_MDM_APK_UMS_CTL
+
+extern void pantech_usb_gadget_connect(void)
+{
+	usb_gadget_connect(_android_dev->cdev->gadget);
+}
+
+extern void pantech_usb_gadget_disconnect(void)
+{
+	usb_gadget_disconnect(_android_dev->cdev->gadget);
+}
+
+static ssize_t usb_mdm_control_show(struct device *pdev, struct device_attribute *attr, char *buf)
+{
+    int value;
+    if(is_mdm_enabled)
+	value = 1;
+    else
+	value = 0;
+
+    return sprintf(buf, "%d", value);
+}
+
+
+static ssize_t usb_mdm_control_store(struct device *pdev,struct device_attribute *attr, const char *buf, size_t size)
+{
+
+    int value;
+    struct android_usb_function *f;
+    struct android_dev *dev = _android_dev;
+    char *mdm_control_disconnected[2] = { "USB_STATE=DISCONNECTED", NULL };
+
+    sscanf(buf, "%d", &value);
+
+    mutex_lock(&dev->mutex);
+
+    if(value){
+
+	is_mdm_enabled = true;
+
+	if(_android_dev->enabled){
+	    android_disable(dev);
+	    list_for_each_entry(f, &dev->enabled_functions, enabled_list) {
+		if (f->disable)
+		    f->disable(f);
+	    }
+	    dev->enabled = false;
+
+	    kobject_uevent_env(&_android_dev->dev->kobj, KOBJ_CHANGE, mdm_control_disconnected);
+	}		
+    }else{
+
+	is_mdm_enabled = false;
+
+	pantech_pullup_internal_control(1);
+
+	if(!_android_dev->enabled){
+	    _android_dev->cdev->desc.idVendor = device_desc.idVendor;
+	    _android_dev->cdev->desc.idProduct = device_desc.idProduct;
+	    _android_dev->cdev->desc.bcdDevice = device_desc.bcdDevice;
+	    _android_dev->cdev->desc.bDeviceClass = device_desc.bDeviceClass;
+	    _android_dev->cdev->desc.bDeviceSubClass = device_desc.bDeviceSubClass;
+	    _android_dev->cdev->desc.bDeviceProtocol = device_desc.bDeviceProtocol;
+
+	    list_for_each_entry(f, &dev->enabled_functions, enabled_list) {
+		if (f->enable)
+		    f->enable(f);
+	    }		
+	    android_enable(dev);
+	    dev->enabled = true;
+	}
+    }
+
+    mutex_unlock(&dev->mutex);
+
+    return size;
+}
+#endif
+
 
 static ssize_t pm_qos_show(struct device *pdev,
 			   struct device_attribute *attr, char *buf)
@@ -1724,30 +1906,12 @@ out:
 	return snprintf(buf, PAGE_SIZE, "%s\n", state);
 }
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-#define DESCRIPTOR_ATTR(field, format_string)				\
-static ssize_t								\
-field ## _show(struct device *dev, struct device_attribute *attr,	\
-		char *buf)						\
-{									\
-	return snprintf(buf, PAGE_SIZE,					\
-			format_string, device_desc.field);		\
-}									\
-static ssize_t								\
-field ## _store(struct device *dev, struct device_attribute *attr,	\
-		const char *buf, size_t size)		       		\
-{									\
-	int value;					       		\
-	if (sscanf(buf, format_string, &value) == 1) {			\
-		printk(KERN_ERR "[%s]: value[%d]\n", __func__, value); \
-		if(!b_pantech_usb_module) device_desc.field = value;	 \
-		return size;						\
-	}								\
-	return -1;							\
-}									\
-static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
 
-#else
+#ifdef CONFIG_PANTECH_ANDROID_USB
+ushort getVendorID(void ){
+	return device_desc.idVendor;
+}
+#endif
 
 #define DESCRIPTOR_ATTR(field, format_string)				\
 static ssize_t								\
@@ -1769,7 +1933,6 @@ field ## _store(struct device *dev, struct device_attribute *attr,	\
 	return -1;							\
 }									\
 static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
-#endif/*CONFIG_ANDROID_PANTECH_USB_MANAGER*/
 
 #define DESCRIPTOR_STRING_ATTR(field, buffer)				\
 static ssize_t								\
@@ -1804,11 +1967,20 @@ DESCRIPTOR_STRING_ATTR(iSerial, serial_string)
 static DEVICE_ATTR(functions, S_IRUGO | S_IWUSR, functions_show,
 						 functions_store);
 static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, enable_show, enable_store);
+
+#ifdef CONFIG_PANTECH_ANDROID_FACTORY_MODE
+static DEVICE_ATTR(factory_mode, S_IRUGO | S_IWUSR, factory_mode_show, factory_mode_store);
+#endif
+
 static DEVICE_ATTR(pm_qos, S_IRUGO | S_IWUSR,
 		pm_qos_show, pm_qos_store);
 static DEVICE_ATTR(state, S_IRUGO, state_show, NULL);
 static DEVICE_ATTR(remote_wakeup, S_IRUGO | S_IWUSR,
 		remote_wakeup_show, remote_wakeup_store);
+
+#ifdef FEATURE_MDM_APK_UMS_CTL
+static DEVICE_ATTR(usb_mdm_control, S_IRUGO | S_IWUSR, usb_mdm_control_show, usb_mdm_control_store);
+#endif		
 
 static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_idVendor,
@@ -1823,6 +1995,12 @@ static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_functions,
 	&dev_attr_enable,
 	&dev_attr_pm_qos,
+#ifdef CONFIG_PANTECH_ANDROID_FACTORY_MODE
+	&dev_attr_factory_mode,
+#endif
+#ifdef FEATURE_MDM_APK_UMS_CTL
+	&dev_attr_usb_mdm_control,
+#endif  
 	&dev_attr_state,
 	&dev_attr_remote_wakeup,
 	NULL
@@ -1896,15 +2074,6 @@ static int android_bind(struct usb_composite_dev *cdev)
 	if (gadget_is_otg(cdev->gadget))
 		android_config_driver.descriptors = otg_desc;
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-	id = usb_string_id(cdev);
-	if (id < 0)
-		return id;
-
-	strings_dev[STRING_CONFIG_IDX].id = id;
-	android_config_driver.iConfiguration = id;
-#endif
-
 	gcnum = usb_gadget_controller_number(gadget);
 	if (gcnum >= 0)
 		device_desc.bcdDevice = cpu_to_le16(0x0200 + gcnum);
@@ -1954,8 +2123,8 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	req->length = 0;
 	gadget->ep0->driver_data = cdev;
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_FACTORY_CABLE
-	value = factory_cable_ctrlrequest(cdev, c);
+#ifdef CONFIG_PANTECH_ANDROID_FACTORY_MODE
+	value = factory_mode_ctrlrequest(cdev, c);
 	if(value < 0)
 #endif
 	list_for_each_entry(f, &dev->enabled_functions, enabled_list) {
@@ -1972,10 +2141,6 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	if (value < 0)
 		value = acc_ctrlrequest(cdev, c);
 
-#ifdef CONFIG_ANDROID_PANTECH_USB_USBNET
-	if (value < 0)
-		value = usbnet_function_switch_setup(cdev, c);
-#endif
 	if (value < 0)
 		value = composite_setup(gadget, c);
 
@@ -1997,12 +2162,33 @@ static void android_disconnect(struct usb_gadget *gadget)
 	struct android_dev *dev = _android_dev;
 	struct usb_composite_dev *cdev = get_gadget_data(gadget);
 	unsigned long flags;
+#ifdef FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
+	int is_rndis_enabled = 0;
+#endif
 
 	composite_disconnect(gadget);
 
 	spin_lock_irqsave(&cdev->lock, flags);
+#ifdef FEATURE_ANDROID_PANTECH_USB_QC_FIX_BUG
+	is_rndis_enabled = function_is_enabled(dev , "rndis"); 
+	
+	if(cdev->mute_switch == 1 && pantech_usb_get_chg_type() == USB_CHG_TYPE__SDP){
+		cdev->mute_switch = 0;
+
+		if(is_rndis_enabled){
+			/* Do nothing */
+		}else{
+			dev->connected = 0;
+			schedule_work(&dev->work);
+		}
+	}else{
+		dev->connected = 0;
+		schedule_work(&dev->work);
+	}
+#else
 	dev->connected = 0;
 	schedule_work(&dev->work);
+#endif	
 	spin_unlock_irqrestore(&cdev->lock, flags);
 }
 
@@ -2106,6 +2292,9 @@ static int __init init(void)
 	struct android_dev *dev;
 	int ret;
 
+#ifdef CONFIG_PANTECH_ANDROID_FACTORY_MODE	
+	INIT_DELAYED_WORK(&factory_work, pantech_factory_work);
+#endif
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		pr_err("%s(): Failed to alloc memory for android_dev\n",
@@ -2139,11 +2328,6 @@ module_init(init);
 static void __exit cleanup(void)
 {
 	platform_driver_unregister(&android_platform_driver);
-#ifdef CONFIG_ANDROID_PANTECH_USB_MANAGER
-  misc_deregister(&mode_change_device);
-  kfree(_device_mode_change_dev);
-  _device_mode_change_dev = NULL;
-#endif
 	kfree(_android_dev);
 	_android_dev = NULL;
 }

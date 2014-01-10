@@ -22,7 +22,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: bcmsdbus.h,v 13.11.14.2.6.6 2009/10/27 17:20:28 Exp $
+ * $Id: bcmsdbus.h,v 13.11.14.2.6.4.20.1.22.2 2010/11/02 03:17:04 Exp $
  */
 
 #ifndef	_sdio_api_h_
@@ -105,6 +105,9 @@ extern int sdioh_abort(sdioh_info_t *si, uint fnc);
 /* Start and Stop SDIO without re-enumerating the SD card. */
 extern int sdioh_start(sdioh_info_t *si, int stage);
 extern int sdioh_stop(sdioh_info_t *si);
+
+/* Wait system lock free */
+extern int sdioh_waitlockfree(sdioh_info_t *si);
 
 /* Reset and re-initialize the device */
 extern int sdioh_sdio_reset(sdioh_info_t *si);

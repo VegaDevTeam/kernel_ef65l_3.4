@@ -60,10 +60,6 @@
 #include "pm-boot.h"
 #include "devices-msm7x2xa.h"
 
-#if defined(CONFIG_SW_RESET)
-#include "sky_sys_reset.h"
-#endif
-
 /******************************************************************************
  * Debug Definitions
  *****************************************************************************/
@@ -1616,9 +1612,7 @@ static int __init msm_pm_init(void)
 		MSM_PM_STAT_FAILED_SUSPEND,
 		MSM_PM_STAT_NOT_IDLE,
 	};
-#if defined(CONFIG_SW_RESET)
-	struct proc_dir_entry *reset_info;
-#endif
+
 #ifdef CONFIG_CPU_V7
 	pgd_t *pc_pgd;
 	pmd_t *pmd;
@@ -1668,17 +1662,6 @@ static int __init msm_pm_init(void)
 		printk(KERN_ERR "%s: failed to get smsm_data\n", __func__);
 		return -ENODEV;
 	}
-#if defined(CONFIG_SW_RESET)
-	sky_sys_rst_set_prev_reset_info();
-	reset_info = create_proc_entry("pantech_resetinfo" , \
-			S_IRUGO | S_IWUGO, NULL);
-
-	if (reset_info) {
-		reset_info->read_proc = sky_sys_rst_read_proc_reset_info;
-		reset_info->write_proc = sky_sys_rst_write_proc_reset_info;
-		reset_info->data = NULL;
-	}
-#endif
 
 	ret = msm_timer_init_time_sync(msm_pm_timeout);
 	if (ret)

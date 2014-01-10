@@ -1092,11 +1092,15 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			return -EFAULT;
 		if (!lock_fb_info(info))
 			return -ENODEV;
+#ifndef CONFIG_PANTECH_LCD_DISABLE_CONSOLE_LOCK
 		console_lock();
+#endif
 		info->flags |= FBINFO_MISC_USEREVENT;
 		ret = fb_set_var(info, &var);
 		info->flags &= ~FBINFO_MISC_USEREVENT;
+#ifndef CONFIG_PANTECH_LCD_DISABLE_CONSOLE_LOCK
 		console_unlock();
+#endif
 		unlock_fb_info(info);
 		if (!ret && copy_to_user(argp, &var, sizeof(var)))
 			ret = -EFAULT;
