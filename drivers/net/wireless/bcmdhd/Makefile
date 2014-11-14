@@ -1,7 +1,11 @@
 # bcmdhd
-#####################
-# SDIO Basic feature
-#####################
+#	-DDHDTHREAD -DDHD_GPL -DDHD_SCHED -DDHD_DEBUG -DSDTEST -DBDC -DTOE    \
+#	-DDHD_BCMEVENTS -DSHOW_EVENTS -DDONGLEOVERLAYS -DBCMDBG               \
+#	-DCUSTOMER_HW2 -DOOB_INTR_ONLY -DHW_OOB       \
+#	-DMMC_SDIO_ABORT -DBCMSDIO -DBCMLXSDMMC -DBCMPLATFORM_BUS -DWLP2P     \
+#	-DNEW_COMPAT_WIRELESS -DWIFI_ACT_FRAME -DARP_OFFLOAD_SUPPORT          \
+#	-DKEEP_ALIVE -DCSCAN -DGET_CUSTOM_MAC_ENABLE -DPKT_FILTER_SUPPORT     \
+#	-DEMBEDDED_PLATFORM -DENABLE_INSMOD_NO_FW_LOAD -DPNO_SUPPORT          \
 
 DHDCFLAGS = -Wall -Wstrict-prototypes -Dlinux -DLINUX -DBCMDRIVER             \
         -DBCMDONGLEHOST -DUNRELEASEDCHIP -DBCMDMA32 -DBCMFILEIMAGE            \
@@ -10,7 +14,14 @@ DHDCFLAGS = -Wall -Wstrict-prototypes -Dlinux -DLINUX -DBCMDRIVER             \
         -DMMC_SDIO_ABORT -DBCMSDIO -DBCMLXSDMMC -DBCMPLATFORM_BUS -DWLP2P     \
         -DWIFI_ACT_FRAME -DARP_OFFLOAD_SUPPORT                                \
         -DKEEP_ALIVE -DCSCAN -DPKT_FILTER_SUPPORT                             \
-        -DEMBEDDED_PLATFORM -DPNO_SUPPORT -DSDIO_CRC_ERROR_FIX
+        -DEMBEDDED_PLATFORM -DPNO_SUPPORT -DSDIO_CRC_ERROR_FIX                \
+	-Idrivers/net/wireless/bcmdhd -Idrivers/net/wireless/bcmdhd/include
+
+DHDOFILES = aiutils.o bcmsdh_sdmmc_linux.o dhd_linux.o siutils.o bcmutils.o   \
+	dhd_linux_sched.o dhd_sdio.o bcmwifi_channels.o bcmevent.o hndpmu.o   \
+	bcmsdh.o dhd_cdc.o bcmsdh_linux.o dhd_common.o linux_osl.o            \
+	bcmsdh_sdmmc.o dhd_custom_gpio.o sbutils.o wl_android.o wl_linux_mon.o   \
+	dhd_cfg80211.o wl_cfg80211.o wl_cfgp2p.o wldev_common.o wl_roam.o
 
 #################
 # Common feature
@@ -136,44 +147,8 @@ DHDCFLAGS += -DENABLE_INSMOD_NO_FW_LOAD
 #EXTRA_LDFLAGS += --strip-debug
 
 EXTRA_CFLAGS += $(DHDCFLAGS) -DDHD_DEBUG
-EXTRA_CFLAGS += -DSRCBASE=\"$(src)/src\"
-EXTRA_CFLAGS += -I$(src)/src/include/
-EXTRA_CFLAGS += -I$(src)/src/dhd/sys/
-EXTRA_CFLAGS += -I$(src)/src/dongle/
-EXTRA_CFLAGS += -I$(src)/src/bcmsdio/sys/
-EXTRA_CFLAGS += -I$(src)/src/wl/sys/
-EXTRA_CFLAGS += -I$(src)/src/shared/
-EXTRA_CFLAGS += -I$(src)/src/shared/bcmwifi/src/
-EXTRA_CFLAGS += -I$(src)/src/shared/bcmwifi/include/
-
 KBUILD_CFLAGS += -I$(LINUXDIR)/include -I$(shell pwd)
 
-DHDOFILES := \
-	     src/bcmsdio/sys/bcmsdh.o \
-	     src/bcmsdio/sys/bcmsdh_linux.o \
-	     src/bcmsdio/sys/bcmsdh_sdmmc.o \
-	     src/bcmsdio/sys/bcmsdh_sdmmc_linux.o \
-	     src/dhd/sys/dhd_cdc.o \
-	     src/dhd/sys/dhd_common.o \
-	     src/dhd/sys/dhd_custom_gpio.o \
-	     src/dhd/sys/dhd_linux.o \
-	     src/dhd/sys/dhd_linux_sched.o \
-	     src/dhd/sys/dhd_cfg80211.o \
-	     src/dhd/sys/dhd_sdio.o \
-	     src/shared/aiutils.o \
-	     src/shared/bcmevent.o \
-	     src/shared/bcmutils.o \
-	     src/shared/bcmwifi/src/bcmwifi_channels.o \
-	     src/shared/hndpmu.o \
-	     src/shared/linux_osl.o \
-	     src/shared/sbutils.o \
-	     src/shared/siutils.o \
-	     src/wl/sys/wl_android.o \
-	     src/wl/sys/wl_cfg80211.o \
-	     src/wl/sys/wl_cfgp2p.o \
-	     src/wl/sys/wldev_common.o \
-	     src/wl/sys/wl_linux_mon.o \
-	     src/wl/sys/wl_roam.o
 
 obj-$(CONFIG_BCMDHD) += bcmdhd.o
 bcmdhd-objs := $(DHDOFILES)
@@ -184,21 +159,7 @@ all:
 
 clean:
 	rm -rf *.o *.ko *.mod.c *~ .*.cmd \
-	Module.symvers modules.order .tmp_versions modules.builtin \
-	src/bcmsdio/sys/*.o \
-	src/bcmsdio/sys/*.o.cmd \
-	src/bcmsdio/sys/.*.o.cmd \
-	src/dhd/sys/*.o \
-	src/dhd/sys/*.o.cmd \
-	src/dhd/sys/.*.o.cmd \
-	src/shared/*.o \
-	src/shared/*.o.cmd \
-	src/shared/.*.o.cmd \
-	src/wl/sys/*.o \
-	src/wl/sys/*.o.cmd \
-	src/wl/sys/.*.o.cmd \
-	src/shared/bcmwifi/src/bcmwifi_channels.o \
-	src/shared/bcmwifi/src/.*.o.cmd
+	Module.symvers modules.order .tmp_versions modules.builtin
 
 install:
 	@$(MAKE) --no-print-directory -C $(KDIR) \
